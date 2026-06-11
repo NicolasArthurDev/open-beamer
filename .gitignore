@@ -1,0 +1,20 @@
+node_modules
+dist
+.DS_Store
+*.log
+.vite
+*.tsbuildinfo
+.turbo
+
+# WASM spike: AGPL engine deps + ~175MB downloaded TeX Live assets (not redistributed here)
+spike/wasm/node_modules/
+spike/wasm/public/
+spike/wasm/package-lock.json
+
+# Private amclean benchmark — proprietary A&M assets, never committed
+packages/engine/.bench-amclean/
+
+# Test/spike artifacts
+*.pdf
+playwright-report/
+test-results/
