@@ -1,0 +1,41 @@
+{
+  "name": "@open-beamer/editing",
+  "version": "0.0.0",
+  "description": "Programmatic .tex editing for open-beamer via the unified-latex AST.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@open-beamer/engine": "workspace:*",
+    "@types/node": "^22.19.17",
+    "tsdown": "^0.9.9",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@unified-latex/unified-latex-types": "^1.8.4",
+    "@unified-latex/unified-latex-util-parse": "^1.8.4",
+    "@unified-latex/unified-latex-util-replace": "^1.8.4",
+    "@unified-latex/unified-latex-util-to-string": "^1.8.4",
+    "@unified-latex/unified-latex-util-visit": "^1.8.4"
+  }
+}

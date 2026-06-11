@@ -1,0 +1,40 @@
+% open-beamer core fixture (the blocking gate — compiles on any TeX Live with beamer+tikz).
+% Exercises the genuinely risky pieces of the pipeline: TikZ overlay with absolute
+% positioning, `remember picture`/`calc`, and the 2nd pass those references force, plus
+% real PDF output. Font handling (fontspec) is covered separately in ../fontspec.
+% Compile with lualatex (or pdflatex/xelatex), 2 passes.
+\documentclass[aspectratio=169]{beamer}
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\definecolor{obAccent}{HTML}{1A365D}
+
+\title{open-beamer fixture}
+\author{Phase 0}
+\date{2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}
+  \frametitle{Primeiro slide}
+  \begin{tikzpicture}[remember picture, overlay]
+    \fill[obAccent]
+      ($(current page.north west)+(0,-1.2cm)$) rectangle
+      ($(current page.north east)+(0,-1.35cm)$);
+  \end{tikzpicture}
+  Primeiro paragrafo com a palavra destaque a ser colorida pela edicao.
+\end{frame}
+
+\begin{frame}
+  \frametitle{Segundo slide}
+  \begin{tikzpicture}[remember picture, overlay]
+    \node[anchor=south east, text=obAccent]
+      at ($(current page.south east)+(-1cm,1cm)$) {nota};
+  \end{tikzpicture}
+  Conteudo posicionado via TikZ, referenciando a pagina atual (forca 2 passadas).
+\end{frame}
+
+\end{document}
