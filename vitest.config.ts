@@ -7,6 +7,9 @@ export default defineConfig({
       '@open-beamer/engine': fileURLToPath(
         new URL('./packages/engine/src/index.ts', import.meta.url),
       ),
+      '@open-beamer/editing': fileURLToPath(
+        new URL('./packages/editing/src/index.ts', import.meta.url),
+      ),
     },
   },
   test: {
