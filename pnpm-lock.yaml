@@ -32,6 +32,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@open-beamer/editing':
+        specifier: workspace:*
+        version: link:../editing
       '@open-beamer/engine':
         specifier: workspace:*
         version: link:../engine

@@ -1,12 +1,62 @@
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  deleteFrame,
+  duplicateFrame,
+  editFrameText,
+  editFrameTitle,
+  type FontSize,
+  listFrames,
+  parseTex,
+  printTex,
+  reorderFrame,
+  setFrameColor,
+  setFrameFontSize,
+} from '@open-beamer/editing';
 import { type CompileResult, compile } from '@open-beamer/engine';
 import fg from 'fast-glob';
-import { loadConfigFromFile, type Plugin } from 'vite';
+import { type Connect, loadConfigFromFile, type Plugin } from 'vite';
 import type { OpenBeamerConfig } from '../config.ts';
+import { validateMutationRequest } from '../http/request-guard.ts';
 
 const CONFIG_FILE = 'open-beamer.config.ts';
+
+export type TexEditOp =
+  | { kind: 'title'; frameIndex: number; value: string }
+  | { kind: 'text'; frameIndex: number; prevText: string; value: string }
+  | { kind: 'fontSize'; frameIndex: number; size: FontSize }
+  | { kind: 'color'; frameIndex: number; color: string }
+  | { kind: 'reorder'; from: number; to: number }
+  | { kind: 'duplicate'; frameIndex: number }
+  | { kind: 'delete'; frameIndex: number };
+
+function applyOp(ast: ReturnType<typeof parseTex>, op: TexEditOp): boolean {
+  switch (op.kind) {
+    case 'title':
+      return editFrameTitle(ast, op.frameIndex, op.value);
+    case 'text':
+      return editFrameText(ast, op.frameIndex, op.prevText, op.value);
+    case 'fontSize':
+      return setFrameFontSize(ast, op.frameIndex, op.size);
+    case 'color':
+      return setFrameColor(ast, op.frameIndex, op.color);
+    case 'reorder':
+      return reorderFrame(ast, op.from, op.to);
+    case 'duplicate':
+      return duplicateFrame(ast, op.frameIndex);
+    case 'delete':
+      return deleteFrame(ast, op.frameIndex);
+    default:
+      return false;
+  }
+}
+
+async function readBody(req: Connect.IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 export type OpenBeamerPluginOptions = {
   userCwd: string;
@@ -137,6 +187,55 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
         const state = await getDeck(idFromUrl(req.url));
         res.setHeader('content-type', 'application/json');
         res.end(JSON.stringify({ status: state.status, log: state.log.slice(-4000) }));
+      });
+
+      server.middlewares.use('/__outline/', async (req, res) => {
+        const file = deckMain(idFromUrl(req.url));
+        res.setHeader('content-type', 'application/json');
+        if (!existsSync(file)) {
+          res.statusCode = 404;
+          res.end(JSON.stringify({ frames: [] }));
+          return;
+        }
+        const frames = listFrames(parseTex(await readFile(file, 'utf8')));
+        res.end(JSON.stringify({ frames }));
+      });
+
+      server.middlewares.use('/__edit', async (req, res, next) => {
+        if (req.method !== 'POST') return next();
+        res.setHeader('content-type', 'application/json');
+        const guard = validateMutationRequest(req, { requireJsonBody: true });
+        if (!guard.ok) {
+          res.statusCode = guard.status;
+          res.end(JSON.stringify({ ok: false, error: guard.error }));
+          return;
+        }
+        let body: { deckId?: string; op?: TexEditOp };
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ ok: false, error: 'invalid json' }));
+          return;
+        }
+        const file = body.deckId ? deckMain(body.deckId) : '';
+        if (!body.op || !existsSync(file)) {
+          res.statusCode = 404;
+          res.end(JSON.stringify({ ok: false, error: 'deck or op missing' }));
+          return;
+        }
+        const src = await readFile(file, 'utf8');
+        const ast = parseTex(src);
+        let written = false;
+        if (applyOp(ast, body.op)) {
+          const updated = printTex(ast);
+          if (updated !== src) {
+            await writeFile(file, updated, 'utf8');
+            written = true;
+          }
+        }
+        // The file watcher picks up the write and triggers recompile + ws notify.
+        res.end(JSON.stringify({ ok: true, changed: written }));
       });
     },
   };
