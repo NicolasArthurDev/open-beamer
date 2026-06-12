@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,6 +61,33 @@ describe('@open-beamer/engine', () => {
     expect(result.pdfPath).not.toBeNull();
     expect(result.pdfSize).toBeGreaterThan(1000);
   });
+
+  it.runIf(engine)(
+    'with outDir, writes the PDF there and leaves the source dir clean',
+    async () => {
+      const src = mkdtempSync(join(tmpdir(), 'ob-src-'));
+      const out = mkdtempSync(join(tmpdir(), 'ob-out-'));
+      try {
+        cpSync(join(fixturesDir, 'sample'), src, { recursive: true });
+        const result = await compile({
+          projectDir: src,
+          mainFile: 'main.tex',
+          engine: engine ?? 'lualatex',
+          passes: 2,
+          outDir: out,
+        });
+        expect(result.status).toBe(0);
+        expect(result.pdfPath).toBe(join(out, 'main.pdf'));
+        expect(existsSync(join(out, 'main.pdf'))).toBe(true);
+        // critical for the dev-server watch loop: no artifacts land next to the source
+        expect(existsSync(join(src, 'main.pdf'))).toBe(false);
+        expect(existsSync(join(src, 'main.aux'))).toBe(false);
+      } finally {
+        rmSync(src, { recursive: true, force: true });
+        rmSync(out, { recursive: true, force: true });
+      }
+    },
+  );
 
   it.runIf(engine && hasFontspec)('compiles the fontspec fixture to a PDF', async () => {
     const result = await compileFixture('fontspec');

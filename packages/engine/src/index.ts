@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -16,6 +16,12 @@ export interface CompileOptions {
   engine?: LatexEngine;
   /** Number of compilation passes. Beamer `remember picture` needs at least 2. */
   passes?: number;
+  /**
+   * Directory for generated output (`.pdf`/`.aux`/`.log`), via `-output-directory`.
+   * Keeps the source dir clean so a file watcher on it doesn't loop. Created if missing.
+   * Defaults to `projectDir` (output alongside the source).
+   */
+  outDir?: string;
 }
 
 export interface CompileResult {
@@ -34,19 +40,24 @@ interface ExecError {
 }
 
 export async function compile(options: CompileOptions): Promise<CompileResult> {
-  const { projectDir, mainFile, engine = 'lualatex', passes = 2 } = options;
-  const pdfPath = join(projectDir, mainFile.replace(/\.tex$/, '.pdf'));
+  const { projectDir, mainFile, engine = 'lualatex', passes = 2, outDir } = options;
+  const pdfDir = outDir ?? projectDir;
+  if (outDir) mkdirSync(outDir, { recursive: true });
+  const pdfPath = join(pdfDir, mainFile.replace(/\.tex$/, '.pdf'));
+
+  const args = ['-interaction=nonstopmode', '-halt-on-error'];
+  if (outDir) args.push(`-output-directory=${outDir}`);
+  args.push(mainFile);
 
   let log = '';
   let status = 0;
 
   for (let pass = 0; pass < passes; pass++) {
     try {
-      const { stdout, stderr } = await execFileAsync(
-        engine,
-        ['-interaction=nonstopmode', '-halt-on-error', mainFile],
-        { cwd: projectDir, maxBuffer: 64 * 1024 * 1024 },
-      );
+      const { stdout, stderr } = await execFileAsync(engine, args, {
+        cwd: projectDir,
+        maxBuffer: 64 * 1024 * 1024,
+      });
       log += stdout + stderr;
     } catch (err) {
       const e = err as ExecError;
