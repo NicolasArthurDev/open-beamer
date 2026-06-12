@@ -1,5 +1,6 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { EditPanel } from '../components/edit-panel';
 import { PdfCanvas } from '../lib/pdf';
 import { useDeck } from '../lib/use-deck';
 
@@ -7,6 +8,7 @@ export function Viewer() {
   const { id = '' } = useParams();
   const { doc, error, loading } = useDeck(id);
   const [params, setParams] = useSearchParams();
+  const [editing, setEditing] = useState(false);
 
   const pageCount = doc?.numPages ?? 1;
   const raw = Number(params.get('p') ?? '1') - 1;
@@ -54,19 +56,25 @@ export function Viewer() {
             {page + 1} / {pageCount}
           </span>
         )}
+        <button type="button" className="present-link" onClick={() => setEditing((v) => !v)}>
+          {editing ? 'Close edit' : 'Edit'}
+        </button>
         <Link to={`/d/${id}/present?p=${page + 1}`} className="present-link">
           Present
         </Link>
       </header>
-      <main className="stage-area">
-        {error ? (
-          <pre className="error-panel">{error}</pre>
-        ) : doc ? (
-          <PdfCanvas doc={doc} page={page + 1} />
-        ) : (
-          <p className="muted">{loading ? 'compiling…' : 'no preview'}</p>
-        )}
-      </main>
+      <div className="viewer-body">
+        <main className="stage-area">
+          {error ? (
+            <pre className="error-panel">{error}</pre>
+          ) : doc ? (
+            <PdfCanvas doc={doc} page={page + 1} />
+          ) : (
+            <p className="muted">{loading ? 'compiling…' : 'no preview'}</p>
+          )}
+        </main>
+        {editing && <EditPanel deckId={id} />}
+      </div>
       {doc && !error && (
         <footer className="nav">
           <button type="button" onClick={() => goTo(page - 1)} disabled={page <= 0}>

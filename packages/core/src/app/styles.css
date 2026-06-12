@@ -149,6 +149,124 @@ a {
   cursor: default;
 }
 
+.viewer-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.viewer-body .stage-area {
+  flex: 1;
+}
+
+/* Edit panel */
+.edit-panel {
+  width: 320px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ep-frames {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ep-frame {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  padding: 7px 9px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.ep-frame.active {
+  border-color: var(--accent);
+}
+
+.ep-frame .ep-num {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.ep-frame .ep-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ep-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.ep-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ep-field input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.ep-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.ep-row button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+.ep-row button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ep-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.ep-danger {
+  color: #ff8585;
+}
+
 /* Present */
 .present {
   height: 100%;
