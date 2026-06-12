@@ -1,0 +1,33 @@
+% open-beamer fontspec fixture (runs only where luaotfload/fontspec is available).
+% Mirrors the core fixture but loads fonts via fontspec — the XeLaTeX/LuaLaTeX-only path
+% that amclean depends on. Uses only free fonts shipped with TeX Live (Latin Modern).
+% Compile with lualatex or xelatex, 2 passes.
+\documentclass[aspectratio=169]{beamer}
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
+\setsansfont{Latin Modern Sans}
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\definecolor{obAccent}{HTML}{1A365D}
+
+\title{open-beamer fontspec fixture}
+\author{Phase 0}
+\date{2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}
+  \frametitle{Fontspec}
+  \begin{tikzpicture}[remember picture, overlay]
+    \fill[obAccent]
+      ($(current page.north west)+(0,-1.2cm)$) rectangle
+      ($(current page.north east)+(0,-1.35cm)$);
+  \end{tikzpicture}
+  Texto renderizado com fontspec (Latin Modern via OpenType) e overlay absoluto.
+\end{frame}
+
+\end{document}
