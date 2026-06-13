@@ -6,7 +6,14 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/node_modules", "!**/*.tsbuildinfo", "!spike/wasm/public"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/*.tsbuildinfo",
+      "!spike/wasm/public",
+      "!packages/core/src/app/components/ui"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -18,6 +25,12 @@
     "enabled": true,
     "rules": {
       "recommended": true
+    }
+  },
+  "css": {
+    "parser": {
+      "cssModules": true,
+      "tailwindDirectives": true
     }
   },
   "javascript": {
