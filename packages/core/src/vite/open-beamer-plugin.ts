@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -7,6 +8,7 @@ import {
   editFrameText,
   editFrameTitle,
   type FontSize,
+  frameAtLine,
   listFrames,
   parseTex,
   printTex,
@@ -199,6 +201,41 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
         }
         const frames = listFrames(parseTex(await readFile(file, 'utf8')));
         res.end(JSON.stringify({ frames }));
+      });
+
+      server.middlewares.use('/__locate/', async (req, res) => {
+        res.setHeader('content-type', 'application/json');
+        const raw = req.url ?? '/';
+        const id = decodeURIComponent(raw.slice(1).split('?')[0]);
+        const q = new URLSearchParams(raw.split('?')[1] ?? '');
+        const page = Number(q.get('page'));
+        const x = Number(q.get('x'));
+        const y = Number(q.get('y'));
+        const file = deckMain(id);
+        const outDir = path.join(cacheRoot, id);
+        if (
+          !existsSync(file) ||
+          !existsSync(path.join(outDir, 'main.synctex.gz')) ||
+          !Number.isFinite(page) ||
+          !Number.isFinite(x) ||
+          !Number.isFinite(y)
+        ) {
+          res.end(JSON.stringify({ frameIndex: null }));
+          return;
+        }
+        const stdout = await new Promise<string>((resolve) => {
+          execFile(
+            'synctex',
+            ['edit', '-o', `${page}:${x}:${y}:main.pdf`],
+            { cwd: outDir },
+            (_err, out) => resolve(out ?? ''),
+          );
+        });
+        const match = stdout.match(/Line:(\d+)/);
+        const frameIndex = match
+          ? frameAtLine(await readFile(file, 'utf8'), Number(match[1]))
+          : null;
+        res.end(JSON.stringify({ frameIndex }));
       });
 
       server.middlewares.use('/__edit', async (req, res, next) => {

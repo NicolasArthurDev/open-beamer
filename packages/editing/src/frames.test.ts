@@ -9,6 +9,7 @@ import {
   duplicateFrame,
   editFrameText,
   editFrameTitle,
+  frameAtLine,
   listFrames,
   parseTex,
   printTex,
@@ -89,6 +90,25 @@ describe('frame editing ops', () => {
     ast = parseTex(SAMPLE);
     expect(reorderFrame(ast, 0, 1)).toBe(true);
     expect(listFrames(ast).map((f) => f.title)).toEqual(['Beta', 'Alpha']);
+  });
+});
+
+describe('frameAtLine', () => {
+  // line: 1 \documentclass, 2 \begin{document}, 3 \begin{frame}{Alpha},
+  //       4 Hello world., 5 \end{frame}, 6 \begin{frame}, 7 \frametitle{Beta},
+  //       8 Second body here., 9 \end{frame}, 10 \end{document}
+  it('maps a source line to its containing frame index', () => {
+    expect(frameAtLine(SAMPLE, 4)).toBe(0); // inside Alpha
+    expect(frameAtLine(SAMPLE, 3)).toBe(0); // the \begin line
+    expect(frameAtLine(SAMPLE, 5)).toBe(0); // the \end line
+    expect(frameAtLine(SAMPLE, 7)).toBe(1); // inside Beta
+    expect(frameAtLine(SAMPLE, 9)).toBe(1);
+  });
+
+  it('returns null outside any frame', () => {
+    expect(frameAtLine(SAMPLE, 1)).toBeNull();
+    expect(frameAtLine(SAMPLE, 2)).toBeNull();
+    expect(frameAtLine(SAMPLE, 10)).toBeNull();
   });
 });
 

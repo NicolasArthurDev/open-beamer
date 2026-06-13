@@ -45,7 +45,7 @@ export async function compile(options: CompileOptions): Promise<CompileResult> {
   if (outDir) mkdirSync(outDir, { recursive: true });
   const pdfPath = join(pdfDir, mainFile.replace(/\.tex$/, '.pdf'));
 
-  const args = ['-interaction=nonstopmode', '-halt-on-error'];
+  const args = ['-interaction=nonstopmode', '-halt-on-error', '-synctex=1'];
   if (outDir) args.push(`-output-directory=${outDir}`);
   args.push(mainFile);
 
