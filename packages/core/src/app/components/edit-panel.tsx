@@ -28,6 +28,7 @@ export function EditPanel({
   const { frames } = useOutline(deckId);
   const edit = useEdit(deckId);
   const [sizeIdx, setSizeIdx] = useState(4); // normalsize
+  const [runSizes, setRunSizes] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (frames.length && selected > frames.length - 1) onSelect(frames.length - 1);
@@ -48,6 +49,12 @@ export function EditPanel({
     const next = Math.max(0, Math.min(SIZES.length - 1, sizeIdx + delta));
     setSizeIdx(next);
     void edit({ kind: 'fontSize', frameIndex: frame.index, size: SIZES[next] });
+  };
+  const stepRun = (runText: string, delta: number) => {
+    if (!frame) return;
+    const next = Math.max(0, Math.min(SIZES.length - 1, (runSizes[runText] ?? 4) + delta));
+    setRunSizes((m) => ({ ...m, [runText]: next }));
+    void edit({ kind: 'runFontSize', frameIndex: frame.index, runText, size: SIZES[next] });
   };
 
   return (
@@ -79,15 +86,42 @@ export function EditPanel({
           </label>
 
           {frame.texts.map((t, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: text runs can repeat; index keeps inputs stable across re-renders
-            <label className="ep-field" key={`text-${frame.index}-${i}-${t}`}>
+            // biome-ignore lint/suspicious/noArrayIndexKey: text runs can repeat; index keeps fields stable across re-renders
+            <div className="ep-field" key={`text-${frame.index}-${i}-${t}`}>
               <span>Text</span>
               <input
                 defaultValue={t}
                 onBlur={(e) => commitText(t, e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
               />
-            </label>
+              <div className="ep-run-tools">
+                <button
+                  type="button"
+                  title="bold"
+                  onClick={() => edit({ kind: 'runBold', frameIndex: frame.index, runText: t })}
+                >
+                  B
+                </button>
+                <button type="button" onClick={() => stepRun(t, -1)}>
+                  A−
+                </button>
+                <button type="button" onClick={() => stepRun(t, 1)}>
+                  A+
+                </button>
+                {COLORS.map((c) => (
+                  <button
+                    type="button"
+                    key={c}
+                    className="ep-swatch ep-swatch-sm"
+                    style={{ background: c }}
+                    title={c}
+                    onClick={() =>
+                      edit({ kind: 'runColor', frameIndex: frame.index, runText: t, color: c })
+                    }
+                  />
+                ))}
+              </div>
+            </div>
           ))}
 
           <div className="ep-row">
