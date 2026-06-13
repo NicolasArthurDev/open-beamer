@@ -16,16 +16,24 @@ const SIZES = [
 ];
 const COLORS = ['black', 'red', 'blue', 'teal', 'orange', 'gray'];
 
-export function EditPanel({ deckId }: { deckId: string }) {
+export function EditPanel({
+  deckId,
+  selected,
+  onSelect,
+}: {
+  deckId: string;
+  selected: number;
+  onSelect: (index: number) => void;
+}) {
   const { frames } = useOutline(deckId);
   const edit = useEdit(deckId);
-  const [sel, setSel] = useState(0);
   const [sizeIdx, setSizeIdx] = useState(4); // normalsize
 
   useEffect(() => {
-    if (sel > frames.length - 1) setSel(Math.max(0, frames.length - 1));
-  }, [frames.length, sel]);
+    if (frames.length && selected > frames.length - 1) onSelect(frames.length - 1);
+  }, [frames.length, selected, onSelect]);
 
+  const sel = Math.max(0, Math.min(selected, frames.length - 1));
   const frame = frames[sel];
 
   const commitTitle = (value: string) => {
@@ -50,7 +58,7 @@ export function EditPanel({ deckId }: { deckId: string }) {
             type="button"
             key={f.index}
             className={`ep-frame${f.index === sel ? ' active' : ''}`}
-            onClick={() => setSel(f.index)}
+            onClick={() => onSelect(f.index)}
           >
             <span className="ep-num">{f.index + 1}</span>
             <span className="ep-title">{f.title || <em>untitled</em>}</span>

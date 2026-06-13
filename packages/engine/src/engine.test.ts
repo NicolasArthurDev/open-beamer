@@ -79,6 +79,8 @@ describe('@open-beamer/engine', () => {
         expect(result.status).toBe(0);
         expect(result.pdfPath).toBe(join(out, 'main.pdf'));
         expect(existsSync(join(out, 'main.pdf'))).toBe(true);
+        // SyncTeX output for inverse search (Phase 3)
+        expect(existsSync(join(out, 'main.synctex.gz'))).toBe(true);
         // critical for the dev-server watch loop: no artifacts land next to the source
         expect(existsSync(join(src, 'main.pdf'))).toBe(false);
         expect(existsSync(join(src, 'main.aux'))).toBe(false);
