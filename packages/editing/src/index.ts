@@ -289,6 +289,38 @@ export function duplicateFrame(ast: Ast.Root, index: number): boolean {
   return true;
 }
 
+/**
+ * Map a 1-based source line to the index (document order) of the frame whose
+ * `\begin{frame}..\end{frame}` spans it, or `null` if outside any frame. A pure text
+ * scan — robust against AST position issues and Beamer overlays (SyncTeX may point at
+ * `\end{frame}`, which still falls inside the frame's range). The index matches `listFrames`.
+ */
+export function frameAtLine(texSource: string, line: number): number | null {
+  const lines = texSource.split(/\r?\n/);
+  const beginRe = /\\begin\s*\{frame\}/;
+  const endRe = /\\end\s*\{frame\}/;
+  let frameIndex = -1;
+  let openStart = -1;
+  let inFrame = false;
+  for (let i = 0; i < lines.length; i++) {
+    const ln = i + 1;
+    const text = lines[i];
+    if (!inFrame && beginRe.test(text)) {
+      frameIndex++;
+      openStart = ln;
+      if (endRe.test(text)) {
+        if (line === ln) return frameIndex;
+      } else {
+        inFrame = true;
+      }
+    } else if (inFrame && endRe.test(text)) {
+      if (line >= openStart && line <= ln) return frameIndex;
+      inFrame = false;
+    }
+  }
+  return null;
+}
+
 export function reorderFrame(ast: Ast.Root, from: number, to: number): boolean {
   const frames = collectFrames(ast);
   const a = frames[from];

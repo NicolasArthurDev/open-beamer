@@ -3,12 +3,14 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { EditPanel } from '../components/edit-panel';
 import { PdfCanvas } from '../lib/pdf';
 import { useDeck } from '../lib/use-deck';
+import { locate } from '../lib/use-locate';
 
 export function Viewer() {
   const { id = '' } = useParams();
   const { doc, error, loading } = useDeck(id);
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
+  const [selectedFrame, setSelectedFrame] = useState(0);
 
   const pageCount = doc?.numPages ?? 1;
   const raw = Number(params.get('p') ?? '1') - 1;
@@ -68,12 +70,23 @@ export function Viewer() {
           {error ? (
             <pre className="error-panel">{error}</pre>
           ) : doc ? (
-            <PdfCanvas doc={doc} page={page + 1} />
+            <PdfCanvas
+              doc={doc}
+              page={page + 1}
+              onPick={
+                editing
+                  ? async (p) => {
+                      const idx = await locate(id, p.page, p.x, p.y);
+                      if (idx != null) setSelectedFrame(idx);
+                    }
+                  : undefined
+              }
+            />
           ) : (
             <p className="muted">{loading ? 'compiling…' : 'no preview'}</p>
           )}
         </main>
-        {editing && <EditPanel deckId={id} />}
+        {editing && <EditPanel deckId={id} selected={selectedFrame} onSelect={setSelectedFrame} />}
       </div>
       {doc && !error && (
         <footer className="nav">
