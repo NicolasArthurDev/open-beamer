@@ -87,10 +87,11 @@ export function PdfCanvas({
   };
 
   return (
-    <div ref={wrapRef} className="pdf-stage">
+    <div ref={wrapRef} className="grid h-full w-full place-items-center">
       <canvas
         ref={canvasRef}
         onClick={onPick ? handleClick : undefined}
+        className="rounded-sm bg-white shadow-[0_10px_50px_-12px_rgba(0,0,0,0.55)] ring-1 ring-black/10"
         style={{ cursor: onPick ? 'crosshair' : 'default' }}
       />
     </div>

@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import type { InlineConfig } from 'vite';
 import type { OpenBeamerConfig } from '../config.ts';
@@ -36,7 +37,7 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
     root: APP_ROOT,
     configFile: false,
     envDir: userCwd,
-    plugins: [react(), openBeamerPlugin({ userCwd, config })],
+    plugins: [react(), tailwindcss(), openBeamerPlugin({ userCwd, config })],
     resolve: {
       alias: {
         '@': APP_ROOT,
@@ -45,7 +46,20 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
     },
     optimizeDeps: {
       entries: [path.join(APP_ROOT, 'main.tsx')],
-      include: ['react', 'react-dom', 'react-dom/client', 'react-router-dom', 'pdfjs-dist'],
+      include: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react-router-dom',
+        'pdfjs-dist',
+        'next-themes',
+        'radix-ui',
+        'lucide-react',
+        'clsx',
+        'tailwind-merge',
+        'class-variance-authority',
+        'sonner',
+      ],
     },
     server: {
       port: config.port ?? 5173,
