@@ -159,29 +159,65 @@ function titleTarget(
   return null;
 }
 
-/** Top-level text runs (string + whitespace sequences) in a frame's body. */
-function textRuns(frame: Ast.Environment): { text: string; start: number; end: number }[] {
-  const runs: { text: string; start: number; end: number }[] = [];
-  const c = frame.content;
+type TextRun = { text: string; container: Ast.Node[]; start: number; end: number };
+
+// Environments whose contents aren't editable prose (skip when collecting runs).
+const SKIP_ENVS = new Set(['tikzpicture', 'tabular', 'array', 'verbatim']);
+// Macros whose arguments ARE editable prose. unified-latex attaches `\item` text as the
+// macro's argument, so without this bullets would be invisible. Excludes title/color/
+// layout macros (frametitle, color, vspace, …) so they don't show up as editable text.
+const TEXT_MACROS = new Set([
+  'item',
+  'textbf',
+  'textit',
+  'emph',
+  'alert',
+  'underline',
+  'textsf',
+  'texttt',
+  'textrm',
+  'textsc',
+]);
+
+/**
+ * Text runs (string + whitespace sequences) anywhere in a frame's body — including
+ * inside itemize/block/columns/groups — so bullets and nested prose are editable, not
+ * just top-level text. Each run carries its actual container array for in-place edits.
+ */
+function collectTextRuns(nodes: Ast.Node[], out: TextRun[]): void {
   let i = 0;
-  while (i < c.length) {
-    if (c[i].type === 'string' || c[i].type === 'whitespace') {
+  while (i < nodes.length) {
+    const n = nodes[i];
+    if (n.type === 'string' || n.type === 'whitespace') {
       const start = i;
-      while (i < c.length && (c[i].type === 'string' || c[i].type === 'whitespace')) i++;
-      const text = latexToString(c.slice(start, i)).trim();
-      if (text) runs.push({ text, start, end: i });
+      while (i < nodes.length && (nodes[i].type === 'string' || nodes[i].type === 'whitespace'))
+        i++;
+      const text = latexToString(nodes.slice(start, i)).trim();
+      if (text) out.push({ text, container: nodes, start, end: i });
     } else {
+      if (n.type === 'group') {
+        collectTextRuns(n.content, out);
+      } else if (n.type === 'environment' && !SKIP_ENVS.has(n.env)) {
+        collectTextRuns(n.content, out);
+      } else if (n.type === 'macro' && TEXT_MACROS.has(n.content) && n.args) {
+        for (const arg of n.args) collectTextRuns(arg.content, out);
+      }
       i++;
     }
   }
-  return runs;
+}
+
+function frameTextRuns(frame: Ast.Environment): TextRun[] {
+  const out: TextRun[] = [];
+  collectTextRuns(frame.content, out);
+  return out;
 }
 
 export function listFrames(ast: Ast.Root): FrameInfo[] {
   return collectFrames(ast).map(({ node }, index) => ({
     index,
     title: titleTarget(node)?.get() ?? '',
-    texts: textRuns(node).map((r) => r.text),
+    texts: frameTextRuns(node).map((r) => r.text),
   }));
 }
 
@@ -201,9 +237,9 @@ export function editFrameText(
 ): boolean {
   const frame = collectFrames(ast)[index]?.node;
   if (!frame) return false;
-  const run = textRuns(frame).find((r) => r.text === prevText.trim());
+  const run = frameTextRuns(frame).find((r) => r.text === prevText.trim());
   if (!run) return false;
-  frame.content.splice(run.start, run.end - run.start, ...parseTex(value).content);
+  run.container.splice(run.start, run.end - run.start, ...parseTex(value).content);
   return true;
 }
 

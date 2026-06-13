@@ -112,6 +112,34 @@ describe('frameAtLine', () => {
   });
 });
 
+const NESTED = `\\documentclass{beamer}
+\\begin{document}
+\\begin{frame}{Agenda}
+\\begin{itemize}
+\\item First topic
+\\item Second topic
+\\end{itemize}
+\\end{frame}
+\\end{document}
+`;
+
+describe('nested body text (itemize/block/columns)', () => {
+  it('lists text runs nested inside environments', () => {
+    const frames = listFrames(parseTex(NESTED));
+    expect(frames[0].texts).toContain('First topic');
+    expect(frames[0].texts).toContain('Second topic');
+  });
+
+  it('edits a nested bullet in place', () => {
+    const ast = parseTex(NESTED);
+    expect(editFrameText(ast, 0, 'First topic', 'Edited topic')).toBe(true);
+    const out = printTex(ast);
+    expect(out).toContain('Edited topic');
+    expect(out).not.toContain('First topic');
+    expect(out).toContain('Second topic'); // the other bullet is untouched
+  });
+});
+
 function hasLualatex(): boolean {
   try {
     execFileSync('lualatex', ['--version'], { stdio: 'ignore' });
