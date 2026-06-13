@@ -159,7 +159,13 @@ function titleTarget(
   return null;
 }
 
-type TextRun = { text: string; container: Ast.Node[]; start: number; end: number };
+type TextRun = {
+  text: string;
+  container: Ast.Node[];
+  start: number;
+  end: number;
+  parent: Ast.Node | null;
+};
 
 // Environments whose contents aren't editable prose (skip when collecting runs).
 const SKIP_ENVS = new Set(['tikzpicture', 'tabular', 'array', 'verbatim']);
@@ -184,7 +190,7 @@ const TEXT_MACROS = new Set([
  * inside itemize/block/columns/groups — so bullets and nested prose are editable, not
  * just top-level text. Each run carries its actual container array for in-place edits.
  */
-function collectTextRuns(nodes: Ast.Node[], out: TextRun[]): void {
+function collectTextRuns(nodes: Ast.Node[], out: TextRun[], parent: Ast.Node | null): void {
   let i = 0;
   while (i < nodes.length) {
     const n = nodes[i];
@@ -193,14 +199,14 @@ function collectTextRuns(nodes: Ast.Node[], out: TextRun[]): void {
       while (i < nodes.length && (nodes[i].type === 'string' || nodes[i].type === 'whitespace'))
         i++;
       const text = latexToString(nodes.slice(start, i)).trim();
-      if (text) out.push({ text, container: nodes, start, end: i });
+      if (text) out.push({ text, container: nodes, start, end: i, parent });
     } else {
       if (n.type === 'group') {
-        collectTextRuns(n.content, out);
+        collectTextRuns(n.content, out, n);
       } else if (n.type === 'environment' && !SKIP_ENVS.has(n.env)) {
-        collectTextRuns(n.content, out);
+        collectTextRuns(n.content, out, n);
       } else if (n.type === 'macro' && TEXT_MACROS.has(n.content) && n.args) {
-        for (const arg of n.args) collectTextRuns(arg.content, out);
+        for (const arg of n.args) collectTextRuns(arg.content, out, n);
       }
       i++;
     }
@@ -209,7 +215,7 @@ function collectTextRuns(nodes: Ast.Node[], out: TextRun[]): void {
 
 function frameTextRuns(frame: Ast.Environment): TextRun[] {
   const out: TextRun[] = [];
-  collectTextRuns(frame.content, out);
+  collectTextRuns(frame.content, out, null);
   return out;
 }
 
@@ -252,58 +258,157 @@ function bodyStart(frame: Ast.Environment): number {
   return i;
 }
 
-function applySwitch(
-  frame: Ast.Environment,
-  match: (m: Ast.Macro) => boolean,
-  make: () => Ast.Node[],
-): boolean {
-  const content = frame.content;
-  let scan = bodyStart(frame);
-  while (scan < content.length && isSpacing(content[scan])) scan++;
-  // Replace an existing leading switch of the same kind (idempotent — no nesting).
-  while (scan < content.length) {
-    const n = content[scan];
-    if (n.type === 'macro' && match(n)) {
-      const made = make();
-      content.splice(scan, 1, ...made);
-      return true;
-    }
-    if (n.type === 'macro' && (isSizeMacro(n) || n.content === 'color')) {
-      scan++;
-      while (scan < content.length && isSpacing(content[scan])) scan++;
-      continue;
-    }
-    break;
-  }
-  content.splice(bodyStart(frame), 0, ...make());
-  return true;
-}
+type SwitchKind = 'size' | 'color' | 'bold';
 
 function isSizeMacro(n: Ast.Macro): boolean {
   return (FONT_SIZES as readonly string[]).includes(n.content);
 }
 
+function switchKind(n: Ast.Node): SwitchKind | null {
+  if (n.type !== 'macro') return null;
+  if (isSizeMacro(n)) return 'size';
+  if (n.content === 'color') return 'color';
+  if (n.content === 'bfseries') return 'bold';
+  return null;
+}
+
+function makeSwitch(kind: SwitchKind, value: string): Ast.Macro {
+  if (kind === 'color') return { type: 'macro', content: 'color', args: [textArgument(value)] };
+  if (kind === 'bold') return { type: 'macro', content: 'bfseries' };
+  return { type: 'macro', content: value }; // size
+}
+
+/**
+ * Insert / replace / remove (value === null) a leading formatting switch of `kind` among the
+ * leading switches of `nodes`, starting at `startIdx`. Idempotent: an existing switch of the
+ * same kind is replaced, never duplicated. Returns whether anything changed.
+ */
+function setLeadingSwitch(
+  nodes: Ast.Node[],
+  startIdx: number,
+  kind: SwitchKind,
+  value: string | null,
+): boolean {
+  let scan = startIdx;
+  while (scan < nodes.length && isSpacing(nodes[scan])) scan++;
+  let found = -1;
+  let s = scan;
+  while (s < nodes.length) {
+    const k = switchKind(nodes[s]);
+    if (k === null) break;
+    if (k === kind) {
+      found = s;
+      break;
+    }
+    s++;
+    while (s < nodes.length && isSpacing(nodes[s])) s++;
+  }
+  if (found >= 0) {
+    if (value === null) {
+      const extra = nodes[found + 1] && isSpacing(nodes[found + 1]) ? 2 : 1;
+      nodes.splice(found, extra);
+    } else {
+      nodes.splice(found, 1, makeSwitch(kind, value));
+    }
+    return true;
+  }
+  if (value === null) return false;
+  nodes.splice(scan, 0, makeSwitch(kind, value), { type: 'whitespace' });
+  return true;
+}
+
+function leadingSwitchPresent(nodes: Ast.Node[], startIdx: number, kind: SwitchKind): boolean {
+  let s = startIdx;
+  while (s < nodes.length && isSpacing(nodes[s])) s++;
+  while (s < nodes.length) {
+    const k = switchKind(nodes[s]);
+    if (k === null) return false;
+    if (k === kind) return true;
+    s++;
+    while (s < nodes.length && isSpacing(nodes[s])) s++;
+  }
+  return false;
+}
+
 export function setFrameFontSize(ast: Ast.Root, index: number, size: FontSize): boolean {
   const frame = collectFrames(ast)[index]?.node;
   if (!frame) return false;
-  return applySwitch(
-    frame,
-    (m) => isSizeMacro(m),
-    () => [{ type: 'macro', content: size }, { type: 'whitespace' }],
-  );
+  return setLeadingSwitch(frame.content, bodyStart(frame), 'size', size);
 }
 
 export function setFrameColor(ast: Ast.Root, index: number, color: string): boolean {
   const frame = collectFrames(ast)[index]?.node;
   if (!frame) return false;
-  return applySwitch(
-    frame,
-    (m) => m.content === 'color',
-    () => [
-      { type: 'macro', content: 'color', args: [textArgument(color)] },
-      { type: 'whitespace' },
-    ],
-  );
+  return setLeadingSwitch(frame.content, bodyStart(frame), 'color', color);
+}
+
+// --- per-run formatting (Trilha A) ---------------------------------------
+
+/** True when the run is the sole text of a `{<switches> text}` group we manage. */
+function inFormattingGroup(run: TextRun): run is TextRun & { parent: Ast.Group } {
+  if (run.parent?.type !== 'group' || run.parent.content !== run.container) return false;
+  const c = run.container;
+  let i = 0;
+  while (i < c.length && isSpacing(c[i])) i++;
+  let hasSwitch = false;
+  while (i < c.length && switchKind(c[i]) !== null) {
+    hasSwitch = true;
+    i++;
+    while (i < c.length && isSpacing(c[i])) i++;
+  }
+  // The run is the text right after the leading switches, running to the end of the group.
+  return hasSwitch && run.start <= i && run.end === c.length;
+}
+
+/** The content array of the formatting group wrapping a run, wrapping it first if needed. */
+function runFormatGroupContent(run: TextRun): Ast.Node[] {
+  if (inFormattingGroup(run)) return run.parent.content;
+  const inner = run.container.slice(run.start, run.end);
+  const group: Ast.Group = { type: 'group', content: inner };
+  run.container.splice(run.start, run.end - run.start, group);
+  return group.content;
+}
+
+function applyRunFormat(
+  ast: Ast.Root,
+  frameIndex: number,
+  runText: string,
+  kind: SwitchKind,
+  value: string | null,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  if (!frame) return false;
+  const run = frameTextRuns(frame).find((r) => r.text === runText.trim());
+  if (!run) return false;
+  if (value === null && !inFormattingGroup(run)) return false;
+  return setLeadingSwitch(runFormatGroupContent(run), 0, kind, value);
+}
+
+export function setRunColor(
+  ast: Ast.Root,
+  frameIndex: number,
+  runText: string,
+  color: string,
+): boolean {
+  return applyRunFormat(ast, frameIndex, runText, 'color', color);
+}
+
+export function setRunFontSize(
+  ast: Ast.Root,
+  frameIndex: number,
+  runText: string,
+  size: FontSize,
+): boolean {
+  return applyRunFormat(ast, frameIndex, runText, 'size', size);
+}
+
+export function toggleRunBold(ast: Ast.Root, frameIndex: number, runText: string): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  if (!frame) return false;
+  const run = frameTextRuns(frame).find((r) => r.text === runText.trim());
+  if (!run) return false;
+  const on = inFormattingGroup(run) && leadingSwitchPresent(run.parent.content, 0, 'bold');
+  return setLeadingSwitch(runFormatGroupContent(run), 0, 'bold', on ? null : 'on');
 }
 
 export function deleteFrame(ast: Ast.Root, index: number): boolean {

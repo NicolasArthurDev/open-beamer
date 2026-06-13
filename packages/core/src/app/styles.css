@@ -267,6 +267,35 @@ a {
   color: #ff8585;
 }
 
+.ep-run-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.ep-run-tools button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  padding: 3px 7px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ep-run-tools button:first-child {
+  font-weight: 700;
+}
+
+.ep-run-tools .ep-swatch-sm {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+}
+
 /* Present */
 .present {
   height: 100%;
