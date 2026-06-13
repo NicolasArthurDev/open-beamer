@@ -430,6 +430,44 @@ export function duplicateFrame(ast: Ast.Root, index: number): boolean {
   return true;
 }
 
+// --- inserting components (paleta) ---------------------------------------
+
+/** Append a LaTeX snippet to the end of a frame's body. */
+export function insertIntoFrame(ast: Ast.Root, frameIndex: number, snippetTex: string): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  if (!frame) return false;
+  const nodes = parseTex(snippetTex).content;
+  if (nodes.length === 0) return false;
+  frame.content.push({ type: 'parbreak' }, ...nodes);
+  return true;
+}
+
+/** Insert a whole-frame snippet right after the frame at `afterIndex` (or append to the document). */
+export function addFrame(ast: Ast.Root, snippetTex: string, afterIndex: number): boolean {
+  const frameNode = parseTex(snippetTex).content.find(
+    (n): n is Ast.Environment => n.type === 'environment' && n.env === 'frame',
+  );
+  if (!frameNode) return false;
+
+  const ref = collectFrames(ast)[afterIndex];
+  if (ref) {
+    const at = ref.container.indexOf(ref.node);
+    if (at >= 0) {
+      ref.container.splice(at + 1, 0, { type: 'parbreak' }, frameNode);
+      return true;
+    }
+  }
+
+  let inserted = false;
+  visit(ast, (n) => {
+    if (!inserted && n.type === 'environment' && n.env === 'document') {
+      n.content.push({ type: 'parbreak' }, frameNode);
+      inserted = true;
+    }
+  });
+  return inserted;
+}
+
 /**
  * Map a 1-based source line to the index (document order) of the frame whose
  * `\begin{frame}..\end{frame}` spans it, or `null` if outside any frame. A pure text
