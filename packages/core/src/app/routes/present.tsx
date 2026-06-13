@@ -35,7 +35,7 @@ export function Present() {
   }, [clamp, id, navigate, page]);
 
   return (
-    <div ref={rootRef} className="present">
+    <div ref={rootRef} className="grid h-dvh place-items-center bg-black p-6">
       {doc && <PdfCanvas doc={doc} page={page + 1} />}
     </div>
   );
