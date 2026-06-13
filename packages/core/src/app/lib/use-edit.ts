@@ -7,7 +7,10 @@ export type TexEditOp =
   | { kind: 'color'; frameIndex: number; color: string }
   | { kind: 'reorder'; from: number; to: number }
   | { kind: 'duplicate'; frameIndex: number }
-  | { kind: 'delete'; frameIndex: number };
+  | { kind: 'delete'; frameIndex: number }
+  | { kind: 'runColor'; frameIndex: number; runText: string; color: string }
+  | { kind: 'runFontSize'; frameIndex: number; runText: string; size: string }
+  | { kind: 'runBold'; frameIndex: number; runText: string };
 
 export function useEdit(deckId: string) {
   return useCallback(

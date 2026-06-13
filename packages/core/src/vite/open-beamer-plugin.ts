@@ -15,6 +15,9 @@ import {
   reorderFrame,
   setFrameColor,
   setFrameFontSize,
+  setRunColor,
+  setRunFontSize,
+  toggleRunBold,
 } from '@open-beamer/editing';
 import { type CompileResult, compile } from '@open-beamer/engine';
 import fg from 'fast-glob';
@@ -31,7 +34,10 @@ export type TexEditOp =
   | { kind: 'color'; frameIndex: number; color: string }
   | { kind: 'reorder'; from: number; to: number }
   | { kind: 'duplicate'; frameIndex: number }
-  | { kind: 'delete'; frameIndex: number };
+  | { kind: 'delete'; frameIndex: number }
+  | { kind: 'runColor'; frameIndex: number; runText: string; color: string }
+  | { kind: 'runFontSize'; frameIndex: number; runText: string; size: FontSize }
+  | { kind: 'runBold'; frameIndex: number; runText: string };
 
 function applyOp(ast: ReturnType<typeof parseTex>, op: TexEditOp): boolean {
   switch (op.kind) {
@@ -49,6 +55,12 @@ function applyOp(ast: ReturnType<typeof parseTex>, op: TexEditOp): boolean {
       return duplicateFrame(ast, op.frameIndex);
     case 'delete':
       return deleteFrame(ast, op.frameIndex);
+    case 'runColor':
+      return setRunColor(ast, op.frameIndex, op.runText, op.color);
+    case 'runFontSize':
+      return setRunFontSize(ast, op.frameIndex, op.runText, op.size);
+    case 'runBold':
+      return toggleRunBold(ast, op.frameIndex, op.runText);
     default:
       return false;
   }

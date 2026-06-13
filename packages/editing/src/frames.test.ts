@@ -16,6 +16,9 @@ import {
   reorderFrame,
   setFrameColor,
   setFrameFontSize,
+  setRunColor,
+  setRunFontSize,
+  toggleRunBold,
 } from './index';
 
 const SAMPLE = `\\documentclass{beamer}
@@ -137,6 +140,57 @@ describe('nested body text (itemize/block/columns)', () => {
     expect(out).toContain('Edited topic');
     expect(out).not.toContain('First topic');
     expect(out).toContain('Second topic'); // the other bullet is untouched
+  });
+});
+
+const countOf = (s: string, sub: string) => s.split(sub).length - 1;
+
+describe('per-run formatting (color/size/bold)', () => {
+  it('colors a single run and re-applying replaces (no nesting), keeping it listed', () => {
+    const ast = parseTex(NESTED);
+    expect(setRunColor(ast, 0, 'First topic', 'red')).toBe(true);
+    let out = printTex(ast);
+    expect(out).toContain('\\color{red}');
+    expect(out).toContain('First topic');
+    // the other bullet is untouched
+    expect(out).toContain('Second topic');
+    // run still listed (re-editable) after formatting
+    expect(listFrames(ast)[0].texts).toContain('First topic');
+
+    expect(setRunColor(ast, 0, 'First topic', 'blue')).toBe(true);
+    out = printTex(ast);
+    expect(countOf(out, '\\color')).toBe(1);
+    expect(out).toContain('\\color{blue}');
+  });
+
+  it('sets per-run font size idempotently', () => {
+    const ast = parseTex(NESTED);
+    setRunFontSize(ast, 0, 'First topic', 'large');
+    setRunFontSize(ast, 0, 'First topic', 'small');
+    const out = printTex(ast);
+    expect(countOf(out, '\\large')).toBe(0);
+    expect(countOf(out, '\\small')).toBe(1);
+  });
+
+  it('toggles bold on and off', () => {
+    const ast = parseTex(NESTED);
+    expect(toggleRunBold(ast, 0, 'First topic')).toBe(true);
+    expect(printTex(ast)).toContain('\\bfseries');
+    expect(toggleRunBold(ast, 0, 'First topic')).toBe(true);
+    expect(printTex(ast)).not.toContain('\\bfseries');
+  });
+
+  it('stacks color + size + bold in one group, run still listed', () => {
+    const ast = parseTex(NESTED);
+    setRunColor(ast, 0, 'First topic', 'red');
+    setRunFontSize(ast, 0, 'First topic', 'large');
+    toggleRunBold(ast, 0, 'First topic');
+    const out = printTex(ast);
+    expect(out).toContain('\\color{red}');
+    expect(out).toContain('\\large');
+    expect(out).toContain('\\bfseries');
+    expect(countOf(out, '\\color')).toBe(1);
+    expect(listFrames(ast)[0].texts).toContain('First topic');
   });
 });
 
