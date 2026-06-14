@@ -3,12 +3,14 @@ import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
+  addFrame,
   deleteFrame,
   duplicateFrame,
   editFrameText,
   editFrameTitle,
   type FontSize,
   frameAtLine,
+  insertIntoFrame,
   listFrames,
   parseTex,
   printTex,
@@ -37,7 +39,9 @@ export type TexEditOp =
   | { kind: 'delete'; frameIndex: number }
   | { kind: 'runColor'; frameIndex: number; runText: string; color: string }
   | { kind: 'runFontSize'; frameIndex: number; runText: string; size: FontSize }
-  | { kind: 'runBold'; frameIndex: number; runText: string };
+  | { kind: 'runBold'; frameIndex: number; runText: string }
+  | { kind: 'insert'; frameIndex: number; snippet: string }
+  | { kind: 'addFrame'; snippet: string; afterIndex: number };
 
 function applyOp(ast: ReturnType<typeof parseTex>, op: TexEditOp): boolean {
   switch (op.kind) {
@@ -61,6 +65,10 @@ function applyOp(ast: ReturnType<typeof parseTex>, op: TexEditOp): boolean {
       return setRunFontSize(ast, op.frameIndex, op.runText, op.size);
     case 'runBold':
       return toggleRunBold(ast, op.frameIndex, op.runText);
+    case 'insert':
+      return insertIntoFrame(ast, op.frameIndex, op.snippet);
+    case 'addFrame':
+      return addFrame(ast, op.snippet, op.afterIndex);
     default:
       return false;
   }

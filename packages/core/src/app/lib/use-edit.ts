@@ -10,7 +10,9 @@ export type TexEditOp =
   | { kind: 'delete'; frameIndex: number }
   | { kind: 'runColor'; frameIndex: number; runText: string; color: string }
   | { kind: 'runFontSize'; frameIndex: number; runText: string; size: string }
-  | { kind: 'runBold'; frameIndex: number; runText: string };
+  | { kind: 'runBold'; frameIndex: number; runText: string }
+  | { kind: 'insert'; frameIndex: number; snippet: string }
+  | { kind: 'addFrame'; snippet: string; afterIndex: number };
 
 export function useEdit(deckId: string) {
   return useCallback(

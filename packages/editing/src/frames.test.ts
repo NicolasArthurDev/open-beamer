@@ -5,11 +5,13 @@ import { join } from 'node:path';
 import { compile } from '@open-beamer/engine';
 import { describe, expect, it } from 'vitest';
 import {
+  addFrame,
   deleteFrame,
   duplicateFrame,
   editFrameText,
   editFrameTitle,
   frameAtLine,
+  insertIntoFrame,
   listFrames,
   parseTex,
   printTex,
@@ -191,6 +193,20 @@ describe('per-run formatting (color/size/bold)', () => {
     expect(out).toContain('\\bfseries');
     expect(countOf(out, '\\color')).toBe(1);
     expect(listFrames(ast)[0].texts).toContain('First topic');
+  });
+});
+
+describe('inserting components', () => {
+  it('inserts a snippet into a frame body (listed afterwards)', () => {
+    const ast = parseTex(SAMPLE);
+    expect(insertIntoFrame(ast, 0, '\\begin{itemize}\\item New bullet\\end{itemize}')).toBe(true);
+    expect(listFrames(ast)[0].texts).toContain('New bullet');
+  });
+
+  it('adds a new frame after the given index, in order', () => {
+    const ast = parseTex(SAMPLE);
+    expect(addFrame(ast, '\\begin{frame}{Gamma}\nHi there.\n\\end{frame}', 0)).toBe(true);
+    expect(listFrames(ast).map((f) => f.title)).toEqual(['Alpha', 'Gamma', 'Beta']);
   });
 });
 
