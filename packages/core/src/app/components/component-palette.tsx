@@ -20,21 +20,23 @@ function groupByCategory(items: ComponentDef[]): [string, ComponentDef[]][] {
 export function ComponentPalette({
   deckId,
   open,
-  selectedFrame,
+  activeFrame,
 }: {
   deckId: string;
   open: boolean;
-  selectedFrame: number;
+  activeFrame: number;
 }) {
   const edit = useEdit(deckId);
   const { mounted, animVisible } = usePanelMount(open);
   if (!mounted) return null;
 
   const insert = (c: ComponentDef) => {
-    if (c.target === 'deck') {
-      void edit({ kind: 'addFrame', snippet: c.snippet, afterIndex: selectedFrame });
+    if (c.target === 'deck-start') {
+      void edit({ kind: 'addFrame', snippet: c.snippet, afterIndex: -1 });
+    } else if (c.target === 'deck') {
+      void edit({ kind: 'addFrame', snippet: c.snippet, afterIndex: activeFrame });
     } else {
-      void edit({ kind: 'insert', frameIndex: selectedFrame, snippet: c.snippet });
+      void edit({ kind: 'insert', frameIndex: activeFrame, snippet: c.snippet });
     }
   };
 

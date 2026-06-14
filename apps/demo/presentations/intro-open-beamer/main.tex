@@ -15,8 +15,7 @@
 \setbeamercolor{structure}{fg=obAccent}
 \setbeamerfont{frametitle}{series=\bfseries}
 \setbeamertemplate{frametitle}{%
-  \vspace{4mm}\insertframetitle\par
-  {\color{obAccent}\rule{\textwidth}{1pt}}%
+	\vspace{4mm}\insertframetitle\par {\color{obAccent}\rule{\textwidth}{1pt}} %
 }
 
 \title{open-beamer}
@@ -25,83 +24,101 @@
 \date{2026}
 
 \begin{document}
+	\begin{frame}[plain]
+		\titlepage
 
-\begin{frame}[plain]
-  \titlepage
-\end{frame}
+		\begin{enumerate}
+			\item Primeiro
 
-\begin{frame}{Agenda}
-  \begin{itemize}
-    \item The problem with authoring Beamer
-    \item How open-beamer works
-    \item What you get today
-  \end{itemize}
-\end{frame}
+			\item Segundo
 
-\begin{frame}{LaTeX gives great output, a rough edit loop}
-  \begin{columns}[T, onlytextwidth]
-    \column{0.5\textwidth}
-      \textbf{Strengths}
-      \begin{itemize}
-        \item Typography and math
-        \item Consistency and version control
-      \end{itemize}
-    \column{0.46\textwidth}
-      \textbf{Pain}
-      \begin{itemize}
-        \item Write, compile, squint, repeat
-        \item No visual feedback
-        \item Fine layout fights the engine
-      \end{itemize}
-  \end{columns}
-  \vspace{4mm}
-  \begin{block}{Takeaway}
-    The output is worth it; the edit loop is what hurts.
-  \end{block}
-\end{frame}
+			\item Terceiro
+		\end{enumerate}
+	\end{frame}
 
-\begin{frame}{How it works}
-  \begin{tikzpicture}[remember picture, overlay]
-    \fill[obAccent] ($(current page.north east)+(-2.2cm,-0.9cm)$)
-      circle (1.4mm);
-  \end{tikzpicture}
-  \begin{enumerate}
-    \item The \texttt{.tex} stays the source of truth.
-    \item A dev server compiles each deck to PDF on save.
-    \item The browser renders the PDF and hot-reloads.
-    \item An AI skill drafts the deck from a prompt.
-  \end{enumerate}
-\end{frame}
+	\begin{frame}{Agenda}
+		\begin{itemize}
+			\item The problem with authoring Beamer
 
-\begin{frame}[plain]
-  \centering\vfill
-  {\Huge\color{obAccent}\textbf{2 passes}}\par\vspace{3mm}
-  {\large compiled per save, so \texttt{remember picture} overlays land right}
-  \vfill
-\end{frame}
+			\item How open-beamer works
 
-\begin{frame}{What you get today}
-  \begin{center}
-    \begin{tabular}{@{}ll@{}}
-      \toprule
-      \textbf{Capability} & \textbf{Status} \\
-      \midrule
-      Live PDF preview & ready \\
-      Page navigation and present mode & ready \\
-      Hot-reload on save & ready \\
-      AI deck generation & this skill \\
-      \bottomrule
-    \end{tabular}
-  \end{center}
-  \vspace{3mm}
-  Ranges like weeks 1--2 use an en-dash, never a long dash.
-\end{frame}
+			\item What you get today
+		\end{itemize}
+	\end{frame}
 
-\begin{frame}[plain]
-  \centering\vfill
-  {\Huge\color{obAccent}\textbf{Thank you}}\par\vspace{4mm}
-  {\large github.com/NicolasArthurDev/open-beamer}
-  \vfill
-\end{frame}
+	\begin{frame}{LaTeX gives great output, a rough edit loop}
+		\begin{columns}[T, onlytextwidth]
+			\column{0.5\textwidth}
+			\textbf{Strengths}
+			\begin{itemize}
+				\item Typography and math
 
+				\item Consistency and version control
+			\end{itemize}
+			\column{0.46\textwidth}
+			\textbf{Pain}
+			\begin{itemize}
+				\item Write, compile, squint, repeat
+
+				\item No visual feedback
+
+				\item Fine layout fights the engine
+			\end{itemize}
+		\end{columns}
+		\vspace{4mm}
+		\begin{block}{Takeaway}
+			The output is worth it; the edit loop is what hurts.
+		\end{block}
+	\end{frame}
+
+	\begin{frame}{How it works}
+		\begin{tikzpicture}[remember picture, overlay]
+			\fill[obAccent]
+				($(current page.north east)+(-2.2cm,-0.9cm)$)
+				circle
+				(1.4mm);
+		\end{tikzpicture}
+		\begin{enumerate}
+			\item The \texttt{.tex} stays the source of truth.
+
+			\item A dev server compiles each deck to PDF on save.
+
+			\item The browser renders the PDF and hot-reloads.
+
+			\item An AI skill drafts the deck from a prompt.
+		\end{enumerate}
+	\end{frame}
+
+	\begin{frame}[plain]
+		\centering
+		\vfill
+		{\Huge\color{obAccent}\textbf{2 passes}}\par
+		\vspace{3mm}
+		{\large compiled per save, so \texttt{remember picture} overlays land right}
+		\vfill
+	\end{frame}
+
+	\begin{frame}{What you get today}
+		\begin{center}
+			\begin{tabular}{@{}ll@{}}
+				\toprule \textbf{Capability}     & \textbf{Status} \\
+				\midrule Live PDF preview        & ready           \\
+				Page navigation and present mode & ready           \\
+				Hot-reload on save               & ready           \\
+				AI deck generation               & this skill      \\
+				\bottomrule
+			\end{tabular}
+		\end{center}
+		\vspace{3mm}
+		Ranges like weeks 1--2 use an en-dash, never a long dash.
+	\end{frame}
+
+	\begin{frame}[plain]
+		\centering
+		\vfill
+		{\Huge\color{obAccent}\textbf{Thank you}}\par
+		\vspace{4mm}
+		{\large github.com/NicolasArthurDev/open-beamer}
+		\vfill
+	\end{frame}
 \end{document}

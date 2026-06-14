@@ -11,6 +11,7 @@ import {
   editFrameText,
   editFrameTitle,
   frameAtLine,
+  frameBeginLines,
   insertIntoFrame,
   listFrames,
   parseTex,
@@ -135,13 +136,15 @@ describe('nested body text (itemize/block/columns)', () => {
     expect(frames[0].texts).toContain('Second topic');
   });
 
-  it('edits a nested bullet in place', () => {
+  it('edits a nested bullet in place without gluing onto \\item', () => {
     const ast = parseTex(NESTED);
     expect(editFrameText(ast, 0, 'First topic', 'Edited topic')).toBe(true);
     const out = printTex(ast);
     expect(out).toContain('Edited topic');
     expect(out).not.toContain('First topic');
     expect(out).toContain('Second topic'); // the other bullet is untouched
+    // regression: must not produce `\itemEdited` (control word eating the text)
+    expect(out).not.toMatch(/\\item[A-Za-z]/);
   });
 });
 
@@ -207,6 +210,19 @@ describe('inserting components', () => {
     const ast = parseTex(SAMPLE);
     expect(addFrame(ast, '\\begin{frame}{Gamma}\nHi there.\n\\end{frame}', 0)).toBe(true);
     expect(listFrames(ast).map((f) => f.title)).toEqual(['Alpha', 'Gamma', 'Beta']);
+  });
+
+  it('prepends a new frame at the beginning when afterIndex < 0', () => {
+    const ast = parseTex(SAMPLE);
+    expect(addFrame(ast, '\\begin{frame}{Intro}\nHi.\n\\end{frame}', -1)).toBe(true);
+    expect(listFrames(ast).map((f) => f.title)).toEqual(['Intro', 'Alpha', 'Beta']);
+  });
+});
+
+describe('frameBeginLines', () => {
+  it('returns the 1-based line of each \\begin{frame} in order', () => {
+    // SAMPLE: line 3 = \begin{frame}{Alpha}, line 6 = \begin{frame}
+    expect(frameBeginLines(SAMPLE)).toEqual([3, 6]);
   });
 });
 

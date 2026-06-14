@@ -1,6 +1,5 @@
 import type * as Ast from '@unified-latex/unified-latex-types';
 import { getParser } from '@unified-latex/unified-latex-util-parse';
-import { replaceNode } from '@unified-latex/unified-latex-util-replace';
 import { toString as latexToString } from '@unified-latex/unified-latex-util-to-string';
 import { visit } from '@unified-latex/unified-latex-util-visit';
 
@@ -30,44 +29,6 @@ function textArgument(text: string): Ast.Argument {
     closeMark: '}',
     content: [{ type: 'string', content: text }],
   };
-}
-
-/**
- * Replace the title of a frame whose current `\frametitle` text matches `oldTitle`.
- * Returns whether anything changed.
- */
-export function setFrameTitle(ast: Ast.Root, oldTitle: string, newTitle: string): boolean {
-  let changed = false;
-  visit(ast, (node) => {
-    if (node.type !== 'macro' || node.content !== 'frametitle' || !node.args?.length) {
-      return;
-    }
-    const arg = node.args[node.args.length - 1];
-    if (latexToString(arg.content).trim() === oldTitle) {
-      arg.content = parser.parse(newTitle).content;
-      changed = true;
-    }
-  });
-  return changed;
-}
-
-/**
- * Wrap a standalone word in `\textcolor{color}{word}`. Returns whether anything changed.
- */
-export function wrapInColor(ast: Ast.Root, word: string, color: string): boolean {
-  let changed = false;
-  replaceNode(ast, (node) => {
-    if (node.type === 'string' && node.content === word) {
-      changed = true;
-      return {
-        type: 'macro',
-        content: 'textcolor',
-        args: [textArgument(color), textArgument(word)],
-      } as Ast.Macro;
-    }
-    return undefined;
-  });
-  return changed;
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +206,11 @@ export function editFrameText(
   if (!frame) return false;
   const run = frameTextRuns(frame).find((r) => r.text === prevText.trim());
   if (!run) return false;
-  run.container.splice(run.start, run.end - run.start, ...parseTex(value).content);
+  const replacement = parseTex(value).content;
+  // When the run sits at the very start of its container (e.g. right after `\item`),
+  // keep a leading space so the new text doesn't glue onto a control word (`\itemEdited`).
+  const head: Ast.Node[] = run.start === 0 ? [{ type: 'whitespace' }] : [];
+  run.container.splice(run.start, run.end - run.start, ...head, ...replacement);
   return true;
 }
 
@@ -442,14 +407,29 @@ export function insertIntoFrame(ast: Ast.Root, frameIndex: number, snippetTex: s
   return true;
 }
 
-/** Insert a whole-frame snippet right after the frame at `afterIndex` (or append to the document). */
+/**
+ * Insert a whole-frame snippet. `afterIndex < 0` prepends before the first frame
+ * ("novo slide no início"); otherwise inserts right after the frame at `afterIndex`
+ * (falling back to appending to the document).
+ */
 export function addFrame(ast: Ast.Root, snippetTex: string, afterIndex: number): boolean {
   const frameNode = parseTex(snippetTex).content.find(
     (n): n is Ast.Environment => n.type === 'environment' && n.env === 'frame',
   );
   if (!frameNode) return false;
 
-  const ref = collectFrames(ast)[afterIndex];
+  const frames = collectFrames(ast);
+
+  if (afterIndex < 0 && frames.length > 0) {
+    const first = frames[0];
+    const at = first.container.indexOf(first.node);
+    if (at >= 0) {
+      first.container.splice(at, 0, frameNode, { type: 'parbreak' });
+      return true;
+    }
+  }
+
+  const ref = frames[afterIndex];
   if (ref) {
     const at = ref.container.indexOf(ref.node);
     if (at >= 0) {
@@ -466,6 +446,16 @@ export function addFrame(ast: Ast.Root, snippetTex: string, afterIndex: number):
     }
   });
   return inserted;
+}
+
+/** 1-based source line of each `\begin{frame}` in document order (matches `listFrames`). */
+export function frameBeginLines(texSource: string): number[] {
+  const beginRe = /\\begin\s*\{frame\}/;
+  const out: number[] = [];
+  texSource.split(/\r?\n/).forEach((line, i) => {
+    if (beginRe.test(line)) out.push(i + 1);
+  });
+  return out;
 }
 
 /**
