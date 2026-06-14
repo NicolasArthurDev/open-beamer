@@ -36,7 +36,25 @@ function textArgument(text: string): Ast.Argument {
 // order. Edits mutate the AST and the caller reprints with printTex.
 // ---------------------------------------------------------------------------
 
-export type FrameInfo = { index: number; title: string; texts: string[] };
+export type ComponentInfo = { index: number; env: string; label: string };
+export type FrameInfo = {
+  index: number;
+  title: string;
+  texts: string[];
+  components: ComponentInfo[];
+};
+
+/** Friendly labels for the environments the palette inserts (fallback: the env name). */
+const COMPONENT_LABELS: Record<string, string> = {
+  itemize: 'Lista',
+  enumerate: 'Lista numerada',
+  columns: 'Colunas',
+  block: 'Bloco',
+  center: 'Centralizado',
+  quote: 'Citação',
+  figure: 'Figura',
+  table: 'Tabela',
+};
 
 /** Beamer font-size switches, smallest → largest. */
 export const FONT_SIZES = [
@@ -180,12 +198,52 @@ function frameTextRuns(frame: Ast.Environment): TextRun[] {
   return out;
 }
 
+/** Top-level environments in a frame's body — the "components" the palette inserts. */
+function frameComponents(frame: Ast.Environment): { node: Ast.Environment; at: number }[] {
+  const out: { node: Ast.Environment; at: number }[] = [];
+  frame.content.forEach((n, at) => {
+    if (n.type === 'environment') out.push({ node: n, at });
+  });
+  return out;
+}
+
+function componentInfos(frame: Ast.Environment): ComponentInfo[] {
+  return frameComponents(frame).map(({ node }, index) => ({
+    index,
+    env: node.env,
+    label: COMPONENT_LABELS[node.env] ?? node.env,
+  }));
+}
+
 export function listFrames(ast: Ast.Root): FrameInfo[] {
   return collectFrames(ast).map(({ node }, index) => ({
     index,
     title: titleTarget(node)?.get() ?? '',
     texts: frameTextRuns(node).map((r) => r.text),
+    components: componentInfos(node),
   }));
+}
+
+/** Remove the `componentIndex`-th top-level component (environment) from a frame's body. */
+export function deleteFrameComponent(
+  ast: Ast.Root,
+  frameIndex: number,
+  componentIndex: number,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  if (!frame) return false;
+  const ref = frameComponents(frame)[componentIndex];
+  if (!ref) return false;
+  let start = ref.at;
+  let count = 1;
+  // Swallow the separating parbreak/whitespace that insertIntoFrame left before it,
+  // so deleting doesn't leave a widening blank gap.
+  if (start > 0 && isSpacing(frame.content[start - 1])) {
+    start -= 1;
+    count += 1;
+  }
+  frame.content.splice(start, count);
+  return true;
 }
 
 export function editFrameTitle(ast: Ast.Root, index: number, value: string): boolean {

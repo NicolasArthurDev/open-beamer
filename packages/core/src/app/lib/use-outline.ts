@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type FrameInfo = { index: number; title: string; texts: string[] };
+export type ComponentInfo = { index: number; env: string; label: string };
+export type FrameInfo = {
+  index: number;
+  title: string;
+  texts: string[];
+  components: ComponentInfo[];
+};
 
 export function useOutline(id: string) {
   const [frames, setFrames] = useState<FrameInfo[]>([]);

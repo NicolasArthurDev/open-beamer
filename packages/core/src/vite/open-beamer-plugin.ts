@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   addFrame,
   deleteFrame,
+  deleteFrameComponent,
   duplicateFrame,
   editFrameText,
   editFrameTitle,
@@ -42,7 +43,8 @@ export type TexEditOp =
   | { kind: 'runFontSize'; frameIndex: number; runText: string; size: FontSize }
   | { kind: 'runBold'; frameIndex: number; runText: string }
   | { kind: 'insert'; frameIndex: number; snippet: string }
-  | { kind: 'addFrame'; snippet: string; afterIndex: number };
+  | { kind: 'addFrame'; snippet: string; afterIndex: number }
+  | { kind: 'deleteComponent'; frameIndex: number; componentIndex: number };
 
 function applyOp(ast: ReturnType<typeof parseTex>, op: TexEditOp): boolean {
   switch (op.kind) {
@@ -70,6 +72,8 @@ function applyOp(ast: ReturnType<typeof parseTex>, op: TexEditOp): boolean {
       return insertIntoFrame(ast, op.frameIndex, op.snippet);
     case 'addFrame':
       return addFrame(ast, op.snippet, op.afterIndex);
+    case 'deleteComponent':
+      return deleteFrameComponent(ast, op.frameIndex, op.componentIndex);
     default:
       return false;
   }
@@ -197,6 +201,9 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
           id,
           setTimeout(async () => {
             timers.delete(id);
+            // Tell the client a compile is starting so it can show a loading state
+            // for the whole compile, not just the brief PDF fetch afterwards.
+            server.ws.send({ type: 'custom', event: 'open-beamer:deck-compiling', data: { id } });
             const state = await compileDeck(id);
             server.ws.send({
               type: 'custom',

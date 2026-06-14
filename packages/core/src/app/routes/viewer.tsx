@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, Play } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Pencil, Play } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ComponentPalette } from '../components/component-palette';
@@ -98,6 +98,13 @@ export function Viewer() {
               </div>
             )}
           </div>
+
+          {loading && doc && !error && (
+            <div className="-translate-x-1/2 absolute top-4 left-1/2 flex items-center gap-2 rounded-full border border-hairline bg-sidebar/90 px-3 py-1.5 shadow-floating backdrop-blur-md">
+              <Loader2 className="size-3.5 animate-spin text-brand" />
+              <span className="text-[12px] text-muted-foreground">compilando…</span>
+            </div>
+          )}
 
           {doc && !error && (
             <div className="-translate-x-1/2 absolute bottom-4 left-1/2 flex items-center gap-1 rounded-full border border-hairline bg-sidebar/90 px-1.5 py-1 shadow-floating backdrop-blur-md">

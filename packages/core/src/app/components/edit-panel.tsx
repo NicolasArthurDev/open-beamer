@@ -158,6 +158,34 @@ export function EditPanel({
             </Section>
           )}
 
+          {frame.components.length > 0 && (
+            <Section title="Componentes">
+              {frame.components.map((c) => (
+                <div
+                  className="flex items-center justify-between gap-2"
+                  key={`comp-${frame.index}-${c.index}`}
+                >
+                  <span className="text-[12px] text-muted-foreground">{c.label}</span>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    title="excluir componente"
+                    className="text-destructive"
+                    onClick={() =>
+                      edit({
+                        kind: 'deleteComponent',
+                        frameIndex: frame.index,
+                        componentIndex: c.index,
+                      })
+                    }
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
+              ))}
+            </Section>
+          )}
+
           <Section title="Frame">
             <Field label="Fonte">
               <Button variant="outline" size="icon-sm" onClick={() => stepSize(-1)}>

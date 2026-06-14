@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addFrame,
   deleteFrame,
+  deleteFrameComponent,
   duplicateFrame,
   editFrameText,
   editFrameTitle,
@@ -216,6 +217,22 @@ describe('inserting components', () => {
     const ast = parseTex(SAMPLE);
     expect(addFrame(ast, '\\begin{frame}{Intro}\nHi.\n\\end{frame}', -1)).toBe(true);
     expect(listFrames(ast).map((f) => f.title)).toEqual(['Intro', 'Alpha', 'Beta']);
+  });
+
+  it('lists inserted components and deletes one by index', () => {
+    const ast = parseTex(SAMPLE);
+    insertIntoFrame(ast, 0, '\\begin{itemize}\\item One\\end{itemize}');
+    insertIntoFrame(ast, 0, '\\begin{block}{T}\nBody.\n\\end{block}');
+    expect(listFrames(ast)[0].components.map((c) => c.env)).toEqual(['itemize', 'block']);
+
+    // delete the first component (the itemize); the block survives
+    expect(deleteFrameComponent(ast, 0, 0)).toBe(true);
+    const after = listFrames(ast)[0];
+    expect(after.components.map((c) => c.env)).toEqual(['block']);
+    const out = printTex(ast);
+    expect(out).not.toContain('\\begin{itemize}');
+    expect(out).toContain('\\begin{block}');
+    expect(out).toContain('Hello world.'); // original body text untouched
   });
 });
 
