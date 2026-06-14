@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 
-/** Maps the visible PDF page to the frame it belongs to (via the server's SyncTeX page map). */
+/** Maps each visible PDF page to the frame it belongs to (via the server's SyncTeX page map). */
 export function usePageMap(id: string) {
-  const [framePages, setFramePages] = useState<number[]>([]);
+  const [pageToFrame, setPageToFrame] = useState<number[]>([]);
 
   const refresh = useCallback(async () => {
     try {
       const r = await fetch(`/__pagemap/${encodeURIComponent(id)}?t=${Date.now()}`);
-      const d = (await r.json()) as { framePages: number[] };
-      setFramePages(d.framePages ?? []);
+      const d = (await r.json()) as { pageToFrame: number[] };
+      setPageToFrame(d.pageToFrame ?? []);
     } catch {
-      setFramePages([]);
+      setPageToFrame([]);
     }
   }, [id]);
 
@@ -29,17 +29,11 @@ export function usePageMap(id: string) {
     };
   }, [id, refresh]);
 
-  /** Frame index owning a 1-based PDF page (the last frame whose first page is ≤ page). */
+  /** Frame index owning a 1-based PDF page. */
   const frameForPage = useCallback(
-    (pdfPage: number) => {
-      let active = 0;
-      framePages.forEach((firstPage, index) => {
-        if (firstPage <= pdfPage) active = index;
-      });
-      return active;
-    },
-    [framePages],
+    (pdfPage: number) => pageToFrame[pdfPage - 1] ?? 0,
+    [pageToFrame],
   );
 
-  return { framePages, frameForPage };
+  return { pageToFrame, frameForPage };
 }

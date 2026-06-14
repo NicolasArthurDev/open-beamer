@@ -91,6 +91,10 @@ type DeckState = {
   pdfPath: string | null;
   log: string;
   srcHash?: string;
+  /** Snapshot of the produced PDF, read once after the compile fully finished. */
+  pdfBytes?: Buffer;
+  /** Number of pages in the produced PDF (parsed from the LaTeX log). */
+  pageCount?: number;
 };
 
 export async function findDecks(presentationsRoot: string): Promise<string[]> {
@@ -110,8 +114,8 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
 
   const cache = new Map<string, DeckState>();
   const inflight = new Map<string, Promise<DeckState>>();
-  // page → frame map per deck (frame's first PDF page), cached by source hash.
-  const pageMapCache = new Map<string, { hash: string; framePages: number[] }>();
+  // PDF page → frame index per deck (0-based), cached by source hash.
+  const pageMapCache = new Map<string, { hash: string; pageToFrame: number[] }>();
 
   const deckMain = (id: string) => path.join(presentationsRoot, id, 'main.tex');
 
@@ -156,6 +160,12 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
         log: result.log,
         srcHash,
       };
+      // Snapshot the bytes now, while we hold the inflight lock and the file is
+      // complete — so /__pdf never reads main.pdf mid-rewrite by the next compile.
+      if (state.status === 'ok' && state.pdfPath) {
+        state.pdfBytes = await readFile(state.pdfPath);
+        state.pageCount = Number(result.log.match(/Output written on .*?\((\d+) pages?/)?.[1] ?? 0);
+      }
       cache.set(id, state);
       return state;
     })();
@@ -164,6 +174,9 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
   }
 
   async function getDeck(id: string): Promise<DeckState> {
+    // Wait out an in-progress compile so we never serve a half-written PDF.
+    const pending = inflight.get(id);
+    if (pending) return await pending;
     return cache.get(id) ?? (await compileDeck(id));
   }
 
@@ -211,16 +224,15 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
 
       server.middlewares.use('/__pdf/', async (req, res) => {
         const state = await getDeck(idFromUrl(req.url));
-        if (state.status !== 'ok' || !state.pdfPath) {
+        if (state.status !== 'ok' || !state.pdfBytes) {
           res.statusCode = 409;
           res.setHeader('content-type', 'application/json');
           res.end(JSON.stringify({ status: 'error' }));
           return;
         }
-        const bytes = await readFile(state.pdfPath);
         res.setHeader('content-type', 'application/pdf');
         res.setHeader('cache-control', 'no-store');
-        res.end(bytes);
+        res.end(state.pdfBytes);
       });
 
       server.middlewares.use('/__status/', async (req, res) => {
@@ -241,50 +253,48 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
         res.end(JSON.stringify({ frames }));
       });
 
-      // page → frame map via SyncTeX forward search (each frame's first PDF page).
+      // PDF page → frame index via inverse SyncTeX. For each page we ask which
+      // source line it came from, then find the frame whose range contains that
+      // line. (Forward search on a frame's first line is unreliable — SyncTeX maps
+      // a `\frametitle` to the previous page, so it can't tell a frame's first page.)
       server.middlewares.use('/__pagemap/', async (req, res) => {
         res.setHeader('content-type', 'application/json');
         const id = idFromUrl(req.url);
         const file = deckMain(id);
         const outDir = path.join(cacheRoot, id);
         if (!existsSync(file) || !existsSync(path.join(outDir, 'main.synctex.gz'))) {
-          res.end(JSON.stringify({ framePages: [] }));
+          res.end(JSON.stringify({ pageToFrame: [] }));
           return;
         }
         const src = await readFile(file, 'utf8');
         const hash = createHash('sha1').update(src).digest('hex');
         const cached = pageMapCache.get(id);
         if (cached?.hash === hash) {
-          res.end(JSON.stringify({ framePages: cached.framePages }));
+          res.end(JSON.stringify({ pageToFrame: cached.pageToFrame }));
           return;
         }
-        // Probe each frame's first CONTENT line (not the `\begin{frame}` line, which
-        // SyncTeX often maps to the previous page) so the page→frame map is accurate.
-        const lines = src.split(/\r?\n/);
+        const pageCount = (await getDeck(id)).pageCount ?? 0;
         const begins = frameBeginLines(src);
-        const probeLine = (begin: number, next: number): number => {
-          for (let ln = begin + 1; ln < next; ln++) {
-            const text = (lines[ln - 1] ?? '').trim();
-            if (text && !/^\\end\b|\\end\s*\{frame\}/.test(text)) return ln;
-          }
-          return begin;
+        const frameForLine = (line: number): number => {
+          let idx = 0;
+          for (let i = 0; i < begins.length; i++) if (begins[i] <= line) idx = i;
+          return idx;
         };
-        const framePages: number[] = [];
-        for (let i = 0; i < begins.length; i++) {
-          const line = probeLine(begins[i], begins[i + 1] ?? lines.length + 1);
+        const pageToFrame: number[] = [];
+        for (let pg = 1; pg <= pageCount; pg++) {
           const out = await new Promise<string>((resolve) => {
             execFile(
               'synctex',
-              ['view', '-i', `${line}:1:main.tex`, '-o', 'main.pdf'],
+              ['edit', '-o', `${pg}:100:100:main.pdf`],
               { cwd: outDir },
               (_err, o) => resolve(o ?? ''),
             );
           });
-          const m = out.match(/Page:(\d+)/);
-          framePages.push(m ? Number(m[1]) : (framePages.at(-1) ?? 1));
+          const m = out.match(/Line:(\d+)/);
+          pageToFrame.push(m ? frameForLine(Number(m[1])) : (pageToFrame.at(-1) ?? 0));
         }
-        pageMapCache.set(id, { hash, framePages });
-        res.end(JSON.stringify({ framePages }));
+        pageMapCache.set(id, { hash, pageToFrame });
+        res.end(JSON.stringify({ pageToFrame }));
       });
 
       server.middlewares.use('/__edit', async (req, res, next) => {
