@@ -1,15 +1,17 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   addFrame,
   deleteFrame,
+  deleteFrameComponent,
   duplicateFrame,
   editFrameText,
   editFrameTitle,
   type FontSize,
-  frameAtLine,
+  frameBeginLines,
   insertIntoFrame,
   listFrames,
   parseTex,
@@ -41,7 +43,8 @@ export type TexEditOp =
   | { kind: 'runFontSize'; frameIndex: number; runText: string; size: FontSize }
   | { kind: 'runBold'; frameIndex: number; runText: string }
   | { kind: 'insert'; frameIndex: number; snippet: string }
-  | { kind: 'addFrame'; snippet: string; afterIndex: number };
+  | { kind: 'addFrame'; snippet: string; afterIndex: number }
+  | { kind: 'deleteComponent'; frameIndex: number; componentIndex: number };
 
 function applyOp(ast: ReturnType<typeof parseTex>, op: TexEditOp): boolean {
   switch (op.kind) {
@@ -69,6 +72,8 @@ function applyOp(ast: ReturnType<typeof parseTex>, op: TexEditOp): boolean {
       return insertIntoFrame(ast, op.frameIndex, op.snippet);
     case 'addFrame':
       return addFrame(ast, op.snippet, op.afterIndex);
+    case 'deleteComponent':
+      return deleteFrameComponent(ast, op.frameIndex, op.componentIndex);
     default:
       return false;
   }
@@ -89,6 +94,11 @@ type DeckState = {
   status: 'ok' | 'error';
   pdfPath: string | null;
   log: string;
+  srcHash?: string;
+  /** Snapshot of the produced PDF, read once after the compile fully finished. */
+  pdfBytes?: Buffer;
+  /** Number of pages in the produced PDF (parsed from the LaTeX log). */
+  pageCount?: number;
 };
 
 export async function findDecks(presentationsRoot: string): Promise<string[]> {
@@ -108,6 +118,8 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
 
   const cache = new Map<string, DeckState>();
   const inflight = new Map<string, Promise<DeckState>>();
+  // PDF page → frame index per deck (0-based), cached by source hash.
+  const pageMapCache = new Map<string, { hash: string; pageToFrame: number[] }>();
 
   const deckMain = (id: string) => path.join(presentationsRoot, id, 'main.tex');
 
@@ -126,6 +138,19 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
         cache.set(id, miss);
         return miss;
       }
+      const srcHash = createHash('sha1')
+        .update(await readFile(deckMain(id), 'utf8'))
+        .digest('hex');
+      const prev = cache.get(id);
+      // Skip recompiling when the source is byte-identical to the last good build.
+      if (
+        prev?.srcHash === srcHash &&
+        prev.status === 'ok' &&
+        prev.pdfPath &&
+        existsSync(prev.pdfPath)
+      ) {
+        return prev;
+      }
       const result: CompileResult = await compile({
         projectDir: path.join(presentationsRoot, id),
         mainFile: 'main.tex',
@@ -137,7 +162,14 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
         status: result.status === 0 ? 'ok' : 'error',
         pdfPath: result.pdfPath,
         log: result.log,
+        srcHash,
       };
+      // Snapshot the bytes now, while we hold the inflight lock and the file is
+      // complete — so /__pdf never reads main.pdf mid-rewrite by the next compile.
+      if (state.status === 'ok' && state.pdfPath) {
+        state.pdfBytes = await readFile(state.pdfPath);
+        state.pageCount = Number(result.log.match(/Output written on .*?\((\d+) pages?/)?.[1] ?? 0);
+      }
       cache.set(id, state);
       return state;
     })();
@@ -146,6 +178,9 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
   }
 
   async function getDeck(id: string): Promise<DeckState> {
+    // Wait out an in-progress compile so we never serve a half-written PDF.
+    const pending = inflight.get(id);
+    if (pending) return await pending;
     return cache.get(id) ?? (await compileDeck(id));
   }
 
@@ -166,6 +201,9 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
           id,
           setTimeout(async () => {
             timers.delete(id);
+            // Tell the client a compile is starting so it can show a loading state
+            // for the whole compile, not just the brief PDF fetch afterwards.
+            server.ws.send({ type: 'custom', event: 'open-beamer:deck-compiling', data: { id } });
             const state = await compileDeck(id);
             server.ws.send({
               type: 'custom',
@@ -193,16 +231,15 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
 
       server.middlewares.use('/__pdf/', async (req, res) => {
         const state = await getDeck(idFromUrl(req.url));
-        if (state.status !== 'ok' || !state.pdfPath) {
+        if (state.status !== 'ok' || !state.pdfBytes) {
           res.statusCode = 409;
           res.setHeader('content-type', 'application/json');
           res.end(JSON.stringify({ status: 'error' }));
           return;
         }
-        const bytes = await readFile(state.pdfPath);
         res.setHeader('content-type', 'application/pdf');
         res.setHeader('cache-control', 'no-store');
-        res.end(bytes);
+        res.end(state.pdfBytes);
       });
 
       server.middlewares.use('/__status/', async (req, res) => {
@@ -223,39 +260,48 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
         res.end(JSON.stringify({ frames }));
       });
 
-      server.middlewares.use('/__locate/', async (req, res) => {
+      // PDF page → frame index via inverse SyncTeX. For each page we ask which
+      // source line it came from, then find the frame whose range contains that
+      // line. (Forward search on a frame's first line is unreliable — SyncTeX maps
+      // a `\frametitle` to the previous page, so it can't tell a frame's first page.)
+      server.middlewares.use('/__pagemap/', async (req, res) => {
         res.setHeader('content-type', 'application/json');
-        const raw = req.url ?? '/';
-        const id = decodeURIComponent(raw.slice(1).split('?')[0]);
-        const q = new URLSearchParams(raw.split('?')[1] ?? '');
-        const page = Number(q.get('page'));
-        const x = Number(q.get('x'));
-        const y = Number(q.get('y'));
+        const id = idFromUrl(req.url);
         const file = deckMain(id);
         const outDir = path.join(cacheRoot, id);
-        if (
-          !existsSync(file) ||
-          !existsSync(path.join(outDir, 'main.synctex.gz')) ||
-          !Number.isFinite(page) ||
-          !Number.isFinite(x) ||
-          !Number.isFinite(y)
-        ) {
-          res.end(JSON.stringify({ frameIndex: null }));
+        if (!existsSync(file) || !existsSync(path.join(outDir, 'main.synctex.gz'))) {
+          res.end(JSON.stringify({ pageToFrame: [] }));
           return;
         }
-        const stdout = await new Promise<string>((resolve) => {
-          execFile(
-            'synctex',
-            ['edit', '-o', `${page}:${x}:${y}:main.pdf`],
-            { cwd: outDir },
-            (_err, out) => resolve(out ?? ''),
-          );
-        });
-        const match = stdout.match(/Line:(\d+)/);
-        const frameIndex = match
-          ? frameAtLine(await readFile(file, 'utf8'), Number(match[1]))
-          : null;
-        res.end(JSON.stringify({ frameIndex }));
+        const src = await readFile(file, 'utf8');
+        const hash = createHash('sha1').update(src).digest('hex');
+        const cached = pageMapCache.get(id);
+        if (cached?.hash === hash) {
+          res.end(JSON.stringify({ pageToFrame: cached.pageToFrame }));
+          return;
+        }
+        const pageCount = (await getDeck(id)).pageCount ?? 0;
+        const begins = frameBeginLines(src);
+        const frameForLine = (line: number): number => {
+          let idx = 0;
+          for (let i = 0; i < begins.length; i++) if (begins[i] <= line) idx = i;
+          return idx;
+        };
+        const pageToFrame: number[] = [];
+        for (let pg = 1; pg <= pageCount; pg++) {
+          const out = await new Promise<string>((resolve) => {
+            execFile(
+              'synctex',
+              ['edit', '-o', `${pg}:100:100:main.pdf`],
+              { cwd: outDir },
+              (_err, o) => resolve(o ?? ''),
+            );
+          });
+          const m = out.match(/Line:(\d+)/);
+          pageToFrame.push(m ? frameForLine(Number(m[1])) : (pageToFrame.at(-1) ?? 0));
+        }
+        pageMapCache.set(id, { hash, pageToFrame });
+        res.end(JSON.stringify({ pageToFrame }));
       });
 
       server.middlewares.use('/__edit', async (req, res, next) => {

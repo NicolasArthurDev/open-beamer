@@ -12,7 +12,8 @@ export type TexEditOp =
   | { kind: 'runFontSize'; frameIndex: number; runText: string; size: string }
   | { kind: 'runBold'; frameIndex: number; runText: string }
   | { kind: 'insert'; frameIndex: number; snippet: string }
-  | { kind: 'addFrame'; snippet: string; afterIndex: number };
+  | { kind: 'addFrame'; snippet: string; afterIndex: number }
+  | { kind: 'deleteComponent'; frameIndex: number; componentIndex: number };
 
 export function useEdit(deckId: string) {
   return useCallback(

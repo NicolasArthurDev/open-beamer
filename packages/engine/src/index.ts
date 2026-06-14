@@ -5,6 +5,10 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
+// LaTeX log markers that mean another compilation pass is needed (cross-references,
+// labels, or `remember picture` coordinates not yet stable).
+const NEEDS_RERUN = /Rerun to get|undefined references|may have changed|rerunfilecheck/i;
+
 export type LatexEngine = 'lualatex' | 'xelatex';
 
 export interface CompileOptions {
@@ -53,18 +57,23 @@ export async function compile(options: CompileOptions): Promise<CompileResult> {
   let status = 0;
 
   for (let pass = 0; pass < passes; pass++) {
+    let passLog = '';
     try {
       const { stdout, stderr } = await execFileAsync(engine, args, {
         cwd: projectDir,
         maxBuffer: 64 * 1024 * 1024,
       });
-      log += stdout + stderr;
+      passLog = stdout + stderr;
+      log += passLog;
     } catch (err) {
       const e = err as ExecError;
       log += (e.stdout ?? '') + (e.stderr ?? '');
       status = typeof e.code === 'number' ? e.code : 1;
       break;
     }
+    // Only run another pass when LaTeX says references/labels/picture positions changed.
+    // Saves ~50% on simple decks (no cross-refs / `remember picture`).
+    if (!NEEDS_RERUN.test(passLog)) break;
   }
 
   const produced = status === 0 && existsSync(pdfPath) && statSync(pdfPath).size > 0;

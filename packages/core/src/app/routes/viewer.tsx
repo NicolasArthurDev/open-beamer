@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, Play } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Pencil, Play } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ComponentPalette } from '../components/component-palette';
@@ -6,18 +6,20 @@ import { EditPanel } from '../components/edit-panel';
 import { Button } from '../components/ui/button';
 import { PdfCanvas } from '../lib/pdf';
 import { useDeck } from '../lib/use-deck';
-import { locate } from '../lib/use-locate';
+import { usePageMap } from '../lib/use-pagemap';
 
 export function Viewer() {
   const { id = '' } = useParams();
   const { doc, error, loading } = useDeck(id);
+  const { frameForPage } = usePageMap(id);
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
-  const [selectedFrame, setSelectedFrame] = useState(0);
 
   const pageCount = doc?.numPages ?? 1;
   const raw = Number(params.get('p') ?? '1') - 1;
   const page = Number.isFinite(raw) ? Math.max(0, Math.min(pageCount - 1, raw)) : 0;
+  // The inspector + palette follow the slide currently shown in the preview.
+  const activeFrame = frameForPage(page + 1);
 
   const goTo = useCallback(
     (i: number) => {
@@ -77,7 +79,7 @@ export function Viewer() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <ComponentPalette deckId={id} open={editing} selectedFrame={selectedFrame} />
+        <ComponentPalette deckId={id} open={editing} activeFrame={activeFrame} />
         <main className="paper relative min-h-0 min-w-0 flex-1 bg-canvas">
           <div className="absolute inset-0 p-6">
             {error ? (
@@ -87,18 +89,7 @@ export function Viewer() {
                 </pre>
               </div>
             ) : doc ? (
-              <PdfCanvas
-                doc={doc}
-                page={page + 1}
-                onPick={
-                  editing
-                    ? async (pick) => {
-                        const idx = await locate(id, pick.page, pick.x, pick.y);
-                        if (idx != null) setSelectedFrame(idx);
-                      }
-                    : undefined
-                }
-              />
+              <PdfCanvas doc={doc} page={page + 1} />
             ) : (
               <div className="grid h-full place-items-center">
                 <p className="text-[13px] text-muted-foreground">
@@ -107,6 +98,13 @@ export function Viewer() {
               </div>
             )}
           </div>
+
+          {loading && doc && !error && (
+            <div className="-translate-x-1/2 absolute top-4 left-1/2 flex items-center gap-2 rounded-full border border-hairline bg-sidebar/90 px-3 py-1.5 shadow-floating backdrop-blur-md">
+              <Loader2 className="size-3.5 animate-spin text-brand" />
+              <span className="text-[12px] text-muted-foreground">compilando…</span>
+            </div>
+          )}
 
           {doc && !error && (
             <div className="-translate-x-1/2 absolute bottom-4 left-1/2 flex items-center gap-1 rounded-full border border-hairline bg-sidebar/90 px-1.5 py-1 shadow-floating backdrop-blur-md">
@@ -133,12 +131,7 @@ export function Viewer() {
           )}
         </main>
 
-        <EditPanel
-          deckId={id}
-          open={editing}
-          selected={selectedFrame}
-          onSelect={setSelectedFrame}
-        />
+        <EditPanel deckId={id} open={editing} active={activeFrame} />
       </div>
     </div>
   );

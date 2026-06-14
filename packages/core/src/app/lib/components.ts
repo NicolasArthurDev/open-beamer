@@ -15,8 +15,11 @@ export type ComponentDef = {
   label: string;
   icon: LucideIcon;
   category: string;
-  /** 'deck' inserts a whole new frame; 'frame' inserts into the selected frame's body. */
-  target: 'frame' | 'deck';
+  /**
+   * 'frame' inserts into the active frame's body; 'deck' adds a frame after the active one;
+   * 'deck-start' adds a frame at the very beginning of the deck.
+   */
+  target: 'frame' | 'deck' | 'deck-start';
   snippet: string;
 };
 
@@ -28,6 +31,14 @@ export const COMPONENTS: ComponentDef[] = [
     icon: Plus,
     category: 'Slide',
     target: 'deck',
+    snippet: '\\begin{frame}{Novo slide}\n  \n\\end{frame}',
+  },
+  {
+    id: 'new-slide-start',
+    label: 'Slide no início',
+    icon: Plus,
+    category: 'Slide',
+    target: 'deck-start',
     snippet: '\\begin{frame}{Novo slide}\n  \n\\end{frame}',
   },
   {
