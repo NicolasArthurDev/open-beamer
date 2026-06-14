@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, Play } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { ComponentPalette } from '../components/component-palette';
 import { EditPanel } from '../components/edit-panel';
 import { Button } from '../components/ui/button';
 import { PdfCanvas } from '../lib/pdf';
@@ -76,6 +77,7 @@ export function Viewer() {
       </header>
 
       <div className="flex min-h-0 flex-1">
+        <ComponentPalette deckId={id} open={editing} selectedFrame={selectedFrame} />
         <main className="paper relative min-h-0 min-w-0 flex-1 bg-canvas">
           <div className="absolute inset-0 p-6">
             {error ? (
