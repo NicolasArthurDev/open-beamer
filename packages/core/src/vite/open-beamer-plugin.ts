@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import type { ServerResponse } from 'node:http';
 import path from 'node:path';
 import {
@@ -18,6 +18,40 @@ import type { OpenBeamerConfig } from '../config.ts';
 import { validateMutationRequest } from '../http/request-guard.ts';
 
 const CONFIG_FILE = 'open-beamer.config.ts';
+const DECK_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/** Escape the LaTeX-special characters a free-text title might contain. */
+function escapeLatex(s: string): string {
+  return s
+    .replace(/([&%$#_{}])/g, '\\$1')
+    .replace(/~/g, '\\textasciitilde{}')
+    .replace(/\^/g, '\\textasciicircum{}');
+}
+
+/** Minimal portable starter deck (fontspec-free, compiles on a plain TeX Live). */
+function starterTex(title: string): string {
+  return `\\documentclass[aspectratio=169]{beamer}
+\\definecolor{obAccent}{HTML}{2563EB}
+\\setbeamercolor{frametitle}{fg=obAccent}
+
+\\title{${escapeLatex(title)}}
+\\date{}
+
+\\begin{document}
+
+\\begin{frame}
+  \\titlepage
+\\end{frame}
+
+\\begin{frame}{Primeiro slide}
+  \\begin{itemize}
+    \\item Edite no inspector ou use \\textbf{Inserir}.
+  \\end{itemize}
+\\end{frame}
+
+\\end{document}
+`;
+}
 
 async function readBody(req: Connect.IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -328,6 +362,41 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
         };
       server.middlewares.use('/__undo', historyRoute('undo'));
       server.middlewares.use('/__redo', historyRoute('redo'));
+
+      // Create a new deck from the starter template.
+      server.middlewares.use('/__new', async (req, res, next) => {
+        if (req.method !== 'POST') return next();
+        res.setHeader('content-type', 'application/json');
+        const guard = validateMutationRequest(req, { requireJsonBody: true });
+        if (!guard.ok) {
+          res.statusCode = guard.status;
+          res.end(JSON.stringify({ ok: false, error: guard.error }));
+          return;
+        }
+        let body: { id?: string; title?: string };
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ ok: false, error: 'invalid json' }));
+          return;
+        }
+        const id = (body.id ?? '').trim();
+        if (!DECK_ID_RE.test(id)) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ ok: false, error: 'id inválido' }));
+          return;
+        }
+        const file = deckMain(id);
+        if (existsSync(file)) {
+          res.statusCode = 409;
+          res.end(JSON.stringify({ ok: false, error: 'já existe um deck com esse nome' }));
+          return;
+        }
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(file, starterTex(body.title?.trim() || id), 'utf8');
+        res.end(JSON.stringify({ ok: true, id }));
+      });
     },
   };
 }
