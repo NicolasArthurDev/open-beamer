@@ -54,7 +54,7 @@ async function compileFixture(name: string) {
   }
 }
 
-describe('@open-beamer/engine', () => {
+describe('@nitex-studio/engine', () => {
   it.runIf(engine)(`compiles the core fixture to a PDF (2 passes, ${engine})`, async () => {
     const result = await compileFixture('sample');
     expect(result.status).toBe(0);

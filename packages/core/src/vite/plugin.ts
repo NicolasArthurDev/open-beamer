@@ -10,14 +10,14 @@ import {
   listFrames,
   parseTex,
   type TexEditOp,
-} from '@open-beamer/editing';
-import { type CompileResult, compile } from '@open-beamer/engine';
+} from '@nitex-studio/editing';
+import { type CompileResult, compile } from '@nitex-studio/engine';
 import fg from 'fast-glob';
 import { type Connect, loadConfigFromFile, type Plugin } from 'vite';
-import type { OpenBeamerConfig } from '../config.ts';
+import type { NitexStudioConfig } from '../config.ts';
 import { validateMutationRequest } from '../http/request-guard.ts';
 
-const CONFIG_FILE = 'open-beamer.config.ts';
+const CONFIG_FILE = 'nitex-studio.config.ts';
 const DECK_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** Escape the LaTeX-special characters a free-text title might contain. */
@@ -59,9 +59,9 @@ async function readBody(req: Connect.IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export type OpenBeamerPluginOptions = {
+export type NitexStudioPluginOptions = {
   userCwd: string;
-  config: OpenBeamerConfig;
+  config: NitexStudioConfig;
 };
 
 type DeckState = {
@@ -81,14 +81,14 @@ export async function findDecks(presentationsRoot: string): Promise<string[]> {
   return hits.map((h) => h.split('/')[0]).sort();
 }
 
-export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
+export function nitexStudioPlugin(opts: NitexStudioPluginOptions): Plugin {
   const { userCwd, config } = opts;
   const presentationsDir = config.presentationsDir ?? 'presentations';
   const presentationsRoot = path.resolve(userCwd, presentationsDir);
   const engine = config.engine ?? 'lualatex';
   // Compile outputs live here, outside the watched source — so generated
   // .pdf/.aux/.log never re-trigger the watcher. Vite ignores node_modules.
-  const cacheRoot = path.join(userCwd, 'node_modules', '.open-beamer');
+  const cacheRoot = path.join(userCwd, 'node_modules', '.nitex-studio');
 
   const cache = new Map<string, DeckState>();
   const inflight = new Map<string, Promise<DeckState>>();
@@ -188,7 +188,7 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
     decodeURIComponent((url ?? '/').slice(1).split('?')[0]);
 
   return {
-    name: 'open-beamer',
+    name: 'nitex-studio',
     config() {
       return { server: { fs: { allow: [userCwd] } } };
     },
@@ -203,11 +203,11 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
             timers.delete(id);
             // Tell the client a compile is starting so it can show a loading state
             // for the whole compile, not just the brief PDF fetch afterwards.
-            server.ws.send({ type: 'custom', event: 'open-beamer:deck-compiling', data: { id } });
+            server.ws.send({ type: 'custom', event: 'nitex-studio:deck-compiling', data: { id } });
             const state = await compileDeck(id);
             server.ws.send({
               type: 'custom',
-              event: 'open-beamer:deck-changed',
+              event: 'nitex-studio:deck-changed',
               data: { id, status: state.status },
             });
           }, 150),
@@ -401,7 +401,7 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
   };
 }
 
-export async function loadUserConfig(userCwd: string): Promise<OpenBeamerConfig> {
+export async function loadUserConfig(userCwd: string): Promise<NitexStudioConfig> {
   const file = path.join(userCwd, CONFIG_FILE);
   if (!existsSync(file)) return {};
   const loaded = await loadConfigFromFile(
@@ -410,5 +410,5 @@ export async function loadUserConfig(userCwd: string): Promise<OpenBeamerConfig>
     userCwd,
     'silent',
   );
-  return (loaded?.config ?? {}) as OpenBeamerConfig;
+  return (loaded?.config ?? {}) as NitexStudioConfig;
 }

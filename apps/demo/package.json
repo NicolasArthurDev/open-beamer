@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "open-beamer dev"
+    "dev": "nitex-studio dev"
   },
   "dependencies": {
-    "@open-beamer/core": "workspace:*"
+    "@nitex-studio/core": "workspace:*"
   }
 }

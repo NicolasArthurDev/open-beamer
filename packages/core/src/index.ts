@@ -1,1 +1,1 @@
-export type { OpenBeamerConfig } from './config.ts';
+export type { NitexStudioConfig } from './config.ts';

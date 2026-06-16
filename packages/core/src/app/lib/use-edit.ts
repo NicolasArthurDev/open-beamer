@@ -1,4 +1,4 @@
-import type { TexEditOp } from '@open-beamer/editing';
+import type { TexEditOp } from '@nitex-studio/editing';
 import { useCallback } from 'react';
 
 export type { TexEditOp };
