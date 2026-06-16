@@ -11,7 +11,7 @@ import {
 import { useState } from 'react';
 import { useEdit } from '../lib/use-edit';
 import { useOutline } from '../lib/use-outline';
-import { Field, Section } from './panel/panel-fields';
+import { Field, NumberField, Section } from './panel/panel-fields';
 import { PanelShell, usePanelMount } from './panel/panel-shell';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -181,6 +181,86 @@ export function EditPanel({
                   >
                     <Trash2 className="size-3" />
                   </Button>
+                </div>
+              ))}
+            </Section>
+          )}
+
+          {frame.niboxes.length > 0 && (
+            <Section title="Caixas">
+              {frame.niboxes.map((b) => (
+                <div
+                  key={`nibox-${frame.index}-${b.index}`}
+                  className="flex flex-col gap-1.5 rounded-md border border-hairline p-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[12px] text-muted-foreground">
+                      {b.text || 'caixa'}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      title="excluir caixa"
+                      className="text-destructive"
+                      onClick={() =>
+                        edit({ kind: 'deleteNibox', frameIndex: frame.index, niboxIndex: b.index })
+                      }
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      x
+                      <NumberField
+                        value={b.x}
+                        min={0}
+                        max={100}
+                        onChange={(x) =>
+                          edit({
+                            kind: 'moveNibox',
+                            frameIndex: frame.index,
+                            niboxIndex: b.index,
+                            x,
+                            y: b.y,
+                          })
+                        }
+                      />
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      y
+                      <NumberField
+                        value={b.y}
+                        min={0}
+                        max={100}
+                        onChange={(y) =>
+                          edit({
+                            kind: 'moveNibox',
+                            frameIndex: frame.index,
+                            niboxIndex: b.index,
+                            x: b.x,
+                            y,
+                          })
+                        }
+                      />
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      L
+                      <NumberField
+                        value={b.w}
+                        min={5}
+                        max={100}
+                        onChange={(w) =>
+                          edit({
+                            kind: 'resizeNibox',
+                            frameIndex: frame.index,
+                            niboxIndex: b.index,
+                            w,
+                          })
+                        }
+                      />
+                    </span>
+                  </div>
                 </div>
               ))}
             </Section>

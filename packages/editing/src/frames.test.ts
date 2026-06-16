@@ -10,16 +10,21 @@ import {
   applyOpToSource,
   deleteFrame,
   deleteFrameComponent,
+  deleteNibox,
   duplicateFrame,
   editFrameText,
   editFrameTitle,
   frameAtLine,
   frameBeginLines,
   insertIntoFrame,
+  insertNibox,
   listFrames,
+  listNiboxes,
+  moveNibox,
   parseTex,
   printTex,
   reorderFrame,
+  resizeNibox,
   setFrameColor,
   setFrameFontSize,
   setRunColor,
@@ -235,6 +240,42 @@ describe('inserting components', () => {
     expect(out).not.toContain('\\begin{itemize}');
     expect(out).toContain('\\begin{block}');
     expect(out).toContain('Hello world.'); // original body text untouched
+  });
+});
+
+describe('NiTeX niboxes', () => {
+  it('inserts, lists, moves, resizes, clamps and deletes a nibox', () => {
+    const ast = parseTex(SAMPLE);
+    expect(insertNibox(ast, 0, 10.5, 80, 40, 'Caixa')).toBe(true);
+    expect(listNiboxes(ast, 0)).toHaveLength(1);
+    expect(listNiboxes(ast, 0)[0]).toMatchObject({
+      index: 0,
+      x: 10.5,
+      y: 80,
+      w: 40,
+      text: 'Caixa',
+    });
+    expect(printTex(ast)).toContain('\\nibox');
+
+    expect(moveNibox(ast, 0, 0, 25, 60)).toBe(true);
+    expect(listNiboxes(ast, 0)[0]).toMatchObject({ x: 25, y: 60 });
+
+    expect(resizeNibox(ast, 0, 0, 55)).toBe(true);
+    expect(listNiboxes(ast, 0)[0].w).toBe(55);
+
+    // out-of-range coordinates clamp into the 0..100 plane
+    moveNibox(ast, 0, 0, -5, 150);
+    expect(listNiboxes(ast, 0)[0]).toMatchObject({ x: 0, y: 100 });
+
+    expect(deleteNibox(ast, 0, 0)).toBe(true);
+    expect(listNiboxes(ast, 0)).toHaveLength(0);
+  });
+
+  it('surfaces niboxes in listFrames', () => {
+    const ast = parseTex(SAMPLE);
+    insertNibox(ast, 1, 5, 5, 30, 'Rodapé');
+    expect(listFrames(ast)[1].niboxes.map((b) => b.text)).toEqual(['Rodapé']);
+    expect(listFrames(ast)[0].niboxes).toEqual([]);
   });
 });
 

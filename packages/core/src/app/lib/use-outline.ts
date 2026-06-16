@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
 export type ComponentInfo = { index: number; env: string; label: string };
+export type NiboxInfo = { index: number; x: number; y: number; w: number; text: string };
 export type FrameInfo = {
   index: number;
   title: string;
   texts: string[];
   components: ComponentInfo[];
+  niboxes: NiboxInfo[];
 };
 
 export function useOutline(id: string) {

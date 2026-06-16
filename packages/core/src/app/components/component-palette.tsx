@@ -25,6 +25,16 @@ export function ComponentPalette({ deckId, activeFrame }: { deckId: string; acti
       void edit({ kind: 'addFrame', snippet: c.snippet, afterIndex: -1 });
     } else if (c.target === 'deck') {
       void edit({ kind: 'addFrame', snippet: c.snippet, afterIndex: activeFrame });
+    } else if (c.target === 'nibox') {
+      // A draggable positioned box near the top-left of the slide.
+      void edit({
+        kind: 'insertNibox',
+        frameIndex: activeFrame,
+        x: 8,
+        y: 85,
+        w: 35,
+        content: c.snippet,
+      });
     } else {
       void edit({ kind: 'insert', frameIndex: activeFrame, snippet: c.snippet });
     }
