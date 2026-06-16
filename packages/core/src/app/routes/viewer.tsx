@@ -36,7 +36,7 @@ export function Viewer() {
   const page = Number.isFinite(raw) ? Math.max(0, Math.min(pageCount - 1, raw)) : 0;
   // The inspector + palette follow the slide currently shown in the preview.
   const activeFrame = frameForPage(page + 1);
-  const niboxes = frames[activeFrame]?.niboxes ?? [];
+  const niComponents = frames[activeFrame]?.niComponents ?? [];
 
   const goTo = useCallback(
     (i: number) => {
@@ -159,12 +159,12 @@ export function Viewer() {
                 overlay={
                   editing ? (
                     <NiboxOverlay
-                      niboxes={niboxes}
+                      niComponents={niComponents}
                       onMove={(i, x, y) =>
-                        edit({ kind: 'moveNibox', frameIndex: activeFrame, niboxIndex: i, x, y })
+                        edit({ kind: 'moveNiComponent', frameIndex: activeFrame, index: i, x, y })
                       }
                       onResize={(i, w) =>
-                        edit({ kind: 'resizeNibox', frameIndex: activeFrame, niboxIndex: i, w })
+                        edit({ kind: 'resizeNiComponent', frameIndex: activeFrame, index: i, w })
                       }
                     />
                   ) : undefined

@@ -1,7 +1,11 @@
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{nitex}[2026/06/15 NiTeX -- a Cartesian plane for LaTeX]
+\ProvidesPackage{nitex}[2026/06/16 NiTeX -- a Cartesian plane for LaTeX]
 
 \RequirePackage{tikz}
+\RequirePackage{graphicx}
+
+% NiTeX accent color (decks may redefine it).
+\definecolor{nitexAccent}{HTML}{2563EB}
 
 % ---------------------------------------------------------------------------
 % NiTeX coordinate plane
@@ -10,11 +14,11 @@
 %   (x, y) addresses the box's TOP-LEFT corner.
 %   w is the box width as a percentage of \paperwidth.
 %
-%   \nibox{x}{y}{w}{content}
+% Every ni component places styled content at (x, y) with width w through the
+% shared \nitex@place helper. pgfmath (float) computes #/100*\paper... so that
+% dividing first avoids the TeX "Dimension too large" overflow of \dimexpr.
 % ---------------------------------------------------------------------------
-% pgfmath (float) computes #/100*\paper... — dividing first avoids the TeX
-% "Dimension too large" overflow you get from \dimexpr (e.g. 92\paperheight).
-\newcommand\nibox[4]{%
+\newcommand\nitex@place[4]{%
   \begin{tikzpicture}[remember picture, overlay]%
     \pgfmathsetlengthmacro\nitex@x{#1/100*\paperwidth}%
     \pgfmathsetlengthmacro\nitex@y{#2/100*\paperheight}%
@@ -24,5 +28,31 @@
       {#4};%
   \end{tikzpicture}%
 }
+
+% \nibox{x}{y}{w}{content} -- a plain text box.
+\newcommand\nibox[4]{\nitex@place{#1}{#2}{#3}{#4}}
+
+% \nibullets{x}{y}{w}{items} -- items are \item lines, wrapped in an itemize.
+\newcommand\nibullets[4]{\nitex@place{#1}{#2}{#3}{\begin{itemize}#4\end{itemize}}}
+
+% \niblock{x}{y}{w}{title}{body} -- an accented title bar over a body.
+\newcommand\niblock[5]{\nitex@place{#1}{#2}{#3}{%
+  {\color{nitexAccent}\bfseries #4}\par\vspace{1mm}#5}}
+
+% \niquote{x}{y}{w}{content} -- italic quotation with an accent rule.
+\newcommand\niquote[4]{\nitex@place{#1}{#2}{#3}{%
+  {\color{nitexAccent}\rule[-0.2ex]{2pt}{1em}}\hspace{2mm}\itshape #4}}
+
+% \ninumber{x}{y}{w}{number}{label} -- a large stat with a small caption.
+\newcommand\ninumber[5]{\nitex@place{#1}{#2}{#3}{%
+  {\fontsize{34}{38}\selectfont\bfseries\color{nitexAccent}#4}\\[0.5mm]{\small #5}}}
+
+% \niimage{x}{y}{w}{path} -- a placeholder framed box for now (real \includegraphics
+% lands with the asset manager). Shows the path/label, or "Imagem" if empty.
+\newcommand\niimage[4]{\nitex@place{#1}{#2}{#3}{%
+  \fboxsep=0pt\fbox{\parbox[c][2.4cm][c]{\dimexpr\linewidth-2\fboxrule\relax}{\centering\itshape #4}}}}
+
+% \nimath{x}{y}{w}{content} -- display-style math (inline form is node-safe).
+\newcommand\nimath[4]{\nitex@place{#1}{#2}{#3}{\[\displaystyle #4\]}}
 
 \endinput

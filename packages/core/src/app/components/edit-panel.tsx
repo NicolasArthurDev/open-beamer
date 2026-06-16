@@ -1,3 +1,4 @@
+import { NI_COMPONENTS } from '@nitex/nitex';
 import {
   Bold,
   ChevronDown,
@@ -15,6 +16,9 @@ import { Field, NumberField, Section } from './panel/panel-fields';
 import { PanelShell, usePanelMount } from './panel/panel-shell';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+
+/** Field labels per ni component type, for the inspector. */
+const NI_SPEC = new Map(NI_COMPONENTS.map((c) => [c.type, c]));
 
 const SIZES = [
   'tiny',
@@ -186,83 +190,109 @@ export function EditPanel({
             </Section>
           )}
 
-          {frame.niboxes.length > 0 && (
-            <Section title="Caixas">
-              {frame.niboxes.map((b) => (
-                <div
-                  key={`nibox-${frame.index}-${b.index}`}
-                  className="flex flex-col gap-1.5 rounded-md border border-hairline p-2"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[12px] text-muted-foreground">
-                      {b.text || 'caixa'}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      title="excluir caixa"
-                      className="text-destructive"
-                      onClick={() =>
-                        edit({ kind: 'deleteNibox', frameIndex: frame.index, niboxIndex: b.index })
-                      }
-                    >
-                      <Trash2 className="size-3" />
-                    </Button>
+          {frame.niComponents.length > 0 && (
+            <Section title="Componentes">
+              {frame.niComponents.map((c) => {
+                const spec = NI_SPEC.get(c.type);
+                return (
+                  <div
+                    key={`ni-${frame.index}-${c.index}`}
+                    className="flex flex-col gap-1.5 rounded-md border border-hairline p-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[12px] font-medium text-foreground">
+                        {spec?.label ?? c.type}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        title="excluir componente"
+                        className="text-destructive"
+                        onClick={() =>
+                          edit({
+                            kind: 'deleteNiComponent',
+                            frameIndex: frame.index,
+                            index: c.index,
+                          })
+                        }
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </div>
+                    {c.fields.map((val, fi) => (
+                      <Input
+                        // biome-ignore lint/suspicious/noArrayIndexKey: fields are positional per type
+                        key={`ni-${frame.index}-${c.index}-${fi}-${val}`}
+                        defaultValue={val}
+                        placeholder={spec?.fields[fi]?.label}
+                        onBlur={(e) => {
+                          if (e.target.value !== val)
+                            edit({
+                              kind: 'setNiField',
+                              frameIndex: frame.index,
+                              index: c.index,
+                              fieldIndex: fi,
+                              value: e.target.value,
+                            });
+                        }}
+                        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                      />
+                    ))}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        x
+                        <NumberField
+                          value={c.x}
+                          min={0}
+                          max={100}
+                          onChange={(x) =>
+                            edit({
+                              kind: 'moveNiComponent',
+                              frameIndex: frame.index,
+                              index: c.index,
+                              x,
+                              y: c.y,
+                            })
+                          }
+                        />
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        y
+                        <NumberField
+                          value={c.y}
+                          min={0}
+                          max={100}
+                          onChange={(y) =>
+                            edit({
+                              kind: 'moveNiComponent',
+                              frameIndex: frame.index,
+                              index: c.index,
+                              x: c.x,
+                              y,
+                            })
+                          }
+                        />
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        L
+                        <NumberField
+                          value={c.w}
+                          min={5}
+                          max={100}
+                          onChange={(w) =>
+                            edit({
+                              kind: 'resizeNiComponent',
+                              frameIndex: frame.index,
+                              index: c.index,
+                              w,
+                            })
+                          }
+                        />
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      x
-                      <NumberField
-                        value={b.x}
-                        min={0}
-                        max={100}
-                        onChange={(x) =>
-                          edit({
-                            kind: 'moveNibox',
-                            frameIndex: frame.index,
-                            niboxIndex: b.index,
-                            x,
-                            y: b.y,
-                          })
-                        }
-                      />
-                    </span>
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      y
-                      <NumberField
-                        value={b.y}
-                        min={0}
-                        max={100}
-                        onChange={(y) =>
-                          edit({
-                            kind: 'moveNibox',
-                            frameIndex: frame.index,
-                            niboxIndex: b.index,
-                            x: b.x,
-                            y,
-                          })
-                        }
-                      />
-                    </span>
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      L
-                      <NumberField
-                        value={b.w}
-                        min={5}
-                        max={100}
-                        onChange={(w) =>
-                          edit({
-                            kind: 'resizeNibox',
-                            frameIndex: frame.index,
-                            niboxIndex: b.index,
-                            w,
-                          })
-                        }
-                      />
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </Section>
           )}
 

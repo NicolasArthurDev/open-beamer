@@ -84,7 +84,8 @@ export const COMPONENTS: ComponentDef[] = [
     icon: Move,
     category: 'Layout',
     target: 'nibox',
-    snippet: 'Caixa livre',
+    // For target 'nibox' the snippet is the NiTeX component type to insert.
+    snippet: 'box',
   },
   {
     id: 'big-number',
