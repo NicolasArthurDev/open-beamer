@@ -2,8 +2,35 @@ import { Presentation } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../components/ui/card';
+import { type PdfDoc, PdfCanvas, loadPdf } from '../lib/pdf';
 
 type Deck = { id: string };
+
+/** Renders a deck's first slide as a cover, falling back to an icon while it compiles. */
+function DeckThumb({ id }: { id: string }) {
+  const [doc, setDoc] = useState<PdfDoc | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(`/__pdf/${encodeURIComponent(id)}`)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('compile failed'))))
+      .then(loadPdf)
+      .then((d) => {
+        if (!cancelled) setDoc(d);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (!doc) {
+    return (
+      <Presentation className="size-7 text-muted-foreground/50 transition-colors group-hover:text-brand/70" />
+    );
+  }
+  return <PdfCanvas doc={doc} page={1} canvasClassName="" />;
+}
 
 export function Home() {
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -37,8 +64,8 @@ export function Home() {
             {decks.map((d) => (
               <Link key={d.id} to={`/d/${d.id}`} className="group">
                 <Card className="overflow-hidden p-0 transition-colors hover:border-brand/50">
-                  <div className="grid aspect-video place-items-center bg-canvas">
-                    <Presentation className="size-7 text-muted-foreground/50 transition-colors group-hover:text-brand/70" />
+                  <div className="grid aspect-video place-items-center overflow-hidden bg-canvas">
+                    <DeckThumb id={d.id} />
                   </div>
                   <div className="border-t border-hairline px-3 py-2">
                     <span className="truncate text-[13px] font-medium">{d.id}</span>
