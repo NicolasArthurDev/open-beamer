@@ -26,7 +26,7 @@ importers:
 
   apps/demo:
     dependencies:
-      '@open-beamer/core':
+      '@nitex-studio/core':
         specifier: workspace:*
         version: link:../../packages/core
 
@@ -35,12 +35,15 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.8
         version: 5.2.9
-      '@open-beamer/editing':
+      '@nitex-studio/editing':
         specifier: workspace:*
         version: link:../editing
-      '@open-beamer/engine':
+      '@nitex-studio/engine':
         specifier: workspace:*
         version: link:../engine
+      '@nitex/nitex':
+        specifier: workspace:*
+        version: link:../nitex
       '@tailwindcss/vite':
         specifier: ^4.2.2
         version: 4.3.1(vite@5.4.21(@types/node@22.19.21)(lightningcss@1.32.0))
@@ -120,6 +123,9 @@ importers:
 
   packages/editing:
     dependencies:
+      '@nitex/nitex':
+        specifier: workspace:*
+        version: link:../nitex
       '@unified-latex/unified-latex-types':
         specifier: ^1.8.4
         version: 1.8.4
@@ -136,7 +142,7 @@ importers:
         specifier: ^1.8.4
         version: 1.8.4
     devDependencies:
-      '@open-beamer/engine':
+      '@nitex-studio/engine':
         specifier: workspace:*
         version: link:../engine
       '@types/node':
@@ -151,6 +157,21 @@ importers:
 
   packages/engine:
     devDependencies:
+      '@types/node':
+        specifier: ^22.19.17
+        version: 22.19.21
+      tsdown:
+        specifier: ^0.9.9
+        version: 0.9.9(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/nitex:
+    devDependencies:
+      '@nitex-studio/engine':
+        specifier: workspace:*
+        version: link:../engine
       '@types/node':
         specifier: ^22.19.17
         version: 22.19.21

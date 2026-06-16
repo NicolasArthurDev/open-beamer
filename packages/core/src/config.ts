@@ -1,6 +1,6 @@
-import type { LatexEngine } from '@open-beamer/engine';
+import type { LatexEngine } from '@nitex-studio/engine';
 
-export type OpenBeamerConfig = {
+export type NitexStudioConfig = {
   /** Vite base path. Defaults to `/`. */
   base?: string;
   /** Directory holding `<id>/main.tex` decks. Defaults to `presentations`. */

@@ -1,5 +1,5 @@
 {
-  "name": "open-beamer-monorepo",
+  "name": "nitex-studio-monorepo",
   "private": true,
   "version": "0.0.0",
   "packageManager": "pnpm@10.17.0",
@@ -15,12 +15,12 @@
     "check:fix": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "engine": "pnpm --filter @open-beamer/engine",
-    "editing": "pnpm --filter @open-beamer/editing",
-    "engine:bench:amclean": "pnpm --filter @open-beamer/engine bench:amclean",
+    "engine": "pnpm --filter @nitex-studio/engine",
+    "editing": "pnpm --filter @nitex-studio/editing",
+    "engine:bench:amclean": "pnpm --filter @nitex-studio/engine bench:amclean",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "turbo run build --filter=@open-beamer/engine --filter=@open-beamer/editing && changeset publish"
+    "release": "turbo run build --filter=@nitex-studio/engine --filter=@nitex-studio/editing && changeset publish"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.12",

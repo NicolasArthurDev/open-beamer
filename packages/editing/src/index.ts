@@ -1,17 +1,18 @@
+import { clampCoord, NIBOX_MACRO, roundCoord } from '@nitex/nitex';
 import type * as Ast from '@unified-latex/unified-latex-types';
 import { getParser } from '@unified-latex/unified-latex-util-parse';
-import { replaceNode } from '@unified-latex/unified-latex-util-replace';
 import { toString as latexToString } from '@unified-latex/unified-latex-util-to-string';
 import { visit } from '@unified-latex/unified-latex-util-visit';
 
 // unified-latex only attaches arguments to macros it knows the signature of. Beamer's
 // content macros aren't in the default table, so we register the ones we edit. `m` = one
-// mandatory argument.
+// mandatory argument; NiTeX's \nibox takes four (x, y, w, content).
 const parser = getParser({
   macros: {
     frametitle: { signature: 'm' },
     title: { signature: 'm' },
     frame: { signature: 'm' },
+    [NIBOX_MACRO]: { signature: 'm m m m' },
   },
 });
 
@@ -32,50 +33,31 @@ function textArgument(text: string): Ast.Argument {
   };
 }
 
-/**
- * Replace the title of a frame whose current `\frametitle` text matches `oldTitle`.
- * Returns whether anything changed.
- */
-export function setFrameTitle(ast: Ast.Root, oldTitle: string, newTitle: string): boolean {
-  let changed = false;
-  visit(ast, (node) => {
-    if (node.type !== 'macro' || node.content !== 'frametitle' || !node.args?.length) {
-      return;
-    }
-    const arg = node.args[node.args.length - 1];
-    if (latexToString(arg.content).trim() === oldTitle) {
-      arg.content = parser.parse(newTitle).content;
-      changed = true;
-    }
-  });
-  return changed;
-}
-
-/**
- * Wrap a standalone word in `\textcolor{color}{word}`. Returns whether anything changed.
- */
-export function wrapInColor(ast: Ast.Root, word: string, color: string): boolean {
-  let changed = false;
-  replaceNode(ast, (node) => {
-    if (node.type === 'string' && node.content === word) {
-      changed = true;
-      return {
-        type: 'macro',
-        content: 'textcolor',
-        args: [textArgument(color), textArgument(word)],
-      } as Ast.Macro;
-    }
-    return undefined;
-  });
-  return changed;
-}
-
 // ---------------------------------------------------------------------------
 // Frame-level editing (Phase 2). Targets are located by frame index in document
 // order. Edits mutate the AST and the caller reprints with printTex.
 // ---------------------------------------------------------------------------
 
-export type FrameInfo = { index: number; title: string; texts: string[] };
+export type ComponentInfo = { index: number; env: string; label: string };
+export type FrameInfo = {
+  index: number;
+  title: string;
+  texts: string[];
+  components: ComponentInfo[];
+  niboxes: NiboxInfo[];
+};
+
+/** Friendly labels for the environments the palette inserts (fallback: the env name). */
+const COMPONENT_LABELS: Record<string, string> = {
+  itemize: 'Lista',
+  enumerate: 'Lista numerada',
+  columns: 'Colunas',
+  block: 'Bloco',
+  center: 'Centralizado',
+  quote: 'Citação',
+  figure: 'Figura',
+  table: 'Tabela',
+};
 
 /** Beamer font-size switches, smallest → largest. */
 export const FONT_SIZES = [
@@ -219,12 +201,53 @@ function frameTextRuns(frame: Ast.Environment): TextRun[] {
   return out;
 }
 
+/** Top-level environments in a frame's body — the "components" the palette inserts. */
+function frameComponents(frame: Ast.Environment): { node: Ast.Environment; at: number }[] {
+  const out: { node: Ast.Environment; at: number }[] = [];
+  frame.content.forEach((n, at) => {
+    if (n.type === 'environment') out.push({ node: n, at });
+  });
+  return out;
+}
+
+function componentInfos(frame: Ast.Environment): ComponentInfo[] {
+  return frameComponents(frame).map(({ node }, index) => ({
+    index,
+    env: node.env,
+    label: COMPONENT_LABELS[node.env] ?? node.env,
+  }));
+}
+
 export function listFrames(ast: Ast.Root): FrameInfo[] {
   return collectFrames(ast).map(({ node }, index) => ({
     index,
     title: titleTarget(node)?.get() ?? '',
     texts: frameTextRuns(node).map((r) => r.text),
+    components: componentInfos(node),
+    niboxes: niboxInfos(node),
   }));
+}
+
+/** Remove the `componentIndex`-th top-level component (environment) from a frame's body. */
+export function deleteFrameComponent(
+  ast: Ast.Root,
+  frameIndex: number,
+  componentIndex: number,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  if (!frame) return false;
+  const ref = frameComponents(frame)[componentIndex];
+  if (!ref) return false;
+  let start = ref.at;
+  let count = 1;
+  // Swallow the separating parbreak/whitespace that insertIntoFrame left before it,
+  // so deleting doesn't leave a widening blank gap.
+  if (start > 0 && isSpacing(frame.content[start - 1])) {
+    start -= 1;
+    count += 1;
+  }
+  frame.content.splice(start, count);
+  return true;
 }
 
 export function editFrameTitle(ast: Ast.Root, index: number, value: string): boolean {
@@ -245,7 +268,11 @@ export function editFrameText(
   if (!frame) return false;
   const run = frameTextRuns(frame).find((r) => r.text === prevText.trim());
   if (!run) return false;
-  run.container.splice(run.start, run.end - run.start, ...parseTex(value).content);
+  const replacement = parseTex(value).content;
+  // When the run sits at the very start of its container (e.g. right after `\item`),
+  // keep a leading space so the new text doesn't glue onto a control word (`\itemEdited`).
+  const head: Ast.Node[] = run.start === 0 ? [{ type: 'whitespace' }] : [];
+  run.container.splice(run.start, run.end - run.start, ...head, ...replacement);
   return true;
 }
 
@@ -442,14 +469,29 @@ export function insertIntoFrame(ast: Ast.Root, frameIndex: number, snippetTex: s
   return true;
 }
 
-/** Insert a whole-frame snippet right after the frame at `afterIndex` (or append to the document). */
+/**
+ * Insert a whole-frame snippet. `afterIndex < 0` prepends before the first frame
+ * ("novo slide no início"); otherwise inserts right after the frame at `afterIndex`
+ * (falling back to appending to the document).
+ */
 export function addFrame(ast: Ast.Root, snippetTex: string, afterIndex: number): boolean {
   const frameNode = parseTex(snippetTex).content.find(
     (n): n is Ast.Environment => n.type === 'environment' && n.env === 'frame',
   );
   if (!frameNode) return false;
 
-  const ref = collectFrames(ast)[afterIndex];
+  const frames = collectFrames(ast);
+
+  if (afterIndex < 0 && frames.length > 0) {
+    const first = frames[0];
+    const at = first.container.indexOf(first.node);
+    if (at >= 0) {
+      first.container.splice(at, 0, frameNode, { type: 'parbreak' });
+      return true;
+    }
+  }
+
+  const ref = frames[afterIndex];
   if (ref) {
     const at = ref.container.indexOf(ref.node);
     if (at >= 0) {
@@ -466,6 +508,16 @@ export function addFrame(ast: Ast.Root, snippetTex: string, afterIndex: number):
     }
   });
   return inserted;
+}
+
+/** 1-based source line of each `\begin{frame}` in document order (matches `listFrames`). */
+export function frameBeginLines(texSource: string): number[] {
+  const beginRe = /\\begin\s*\{frame\}/;
+  const out: number[] = [];
+  texSource.split(/\r?\n/).forEach((line, i) => {
+    if (beginRe.test(line)) out.push(i + 1);
+  });
+  return out;
 }
 
 /**
@@ -512,4 +564,195 @@ export function reorderFrame(ast: Ast.Root, from: number, to: number): boolean {
   const ti = arr.indexOf(b.node);
   arr.splice(from < to ? ti + 1 : ti, 0, a.node);
   return true;
+}
+
+// --- NiTeX positioned boxes (\nibox{x}{y}{w}{content}) -------------------
+// Coordinates are 0..100, origin bottom-left, y up; (x,y) = the box's top-left
+// corner; w = width as % of the page. See @nitex/nitex.
+
+export type NiboxInfo = { index: number; x: number; y: number; w: number; text: string };
+
+function frameNiboxes(frame: Ast.Environment): Ast.Macro[] {
+  const out: Ast.Macro[] = [];
+  visit(frame, (node) => {
+    if (node.type === 'macro' && node.content === NIBOX_MACRO && (node.args?.length ?? 0) >= 4) {
+      out.push(node);
+    }
+  });
+  return out;
+}
+
+const argToNumber = (arg: Ast.Argument): number => Number(latexToString(arg.content).trim());
+
+function numberArg(value: number): Ast.Argument {
+  return {
+    type: 'argument',
+    openMark: '{',
+    closeMark: '}',
+    content: [{ type: 'string', content: String(roundCoord(clampCoord(value))) }],
+  };
+}
+
+function niboxInfos(frame: Ast.Environment): NiboxInfo[] {
+  return frameNiboxes(frame).map((n, index) => {
+    const a = n.args as Ast.Argument[];
+    return {
+      index,
+      x: argToNumber(a[0]),
+      y: argToNumber(a[1]),
+      w: argToNumber(a[2]),
+      text: latexToString(a[3].content).trim(),
+    };
+  });
+}
+
+export function listNiboxes(ast: Ast.Root, frameIndex: number): NiboxInfo[] {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  return frame ? niboxInfos(frame) : [];
+}
+
+/** Append a `\nibox{x}{y}{w}{content}` to a frame's body. */
+export function insertNibox(
+  ast: Ast.Root,
+  frameIndex: number,
+  x: number,
+  y: number,
+  w: number,
+  content: string,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  if (!frame) return false;
+  const macro: Ast.Macro = {
+    type: 'macro',
+    content: NIBOX_MACRO,
+    args: [
+      numberArg(x),
+      numberArg(y),
+      numberArg(w),
+      { type: 'argument', openMark: '{', closeMark: '}', content: parseTex(content).content },
+    ],
+  };
+  frame.content.push({ type: 'parbreak' }, macro);
+  return true;
+}
+
+export function moveNibox(
+  ast: Ast.Root,
+  frameIndex: number,
+  niboxIndex: number,
+  x: number,
+  y: number,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  const node = frame && frameNiboxes(frame)[niboxIndex];
+  if (!node?.args) return false;
+  node.args[0] = numberArg(x);
+  node.args[1] = numberArg(y);
+  return true;
+}
+
+export function resizeNibox(
+  ast: Ast.Root,
+  frameIndex: number,
+  niboxIndex: number,
+  w: number,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  const node = frame && frameNiboxes(frame)[niboxIndex];
+  if (!node?.args) return false;
+  node.args[2] = numberArg(w);
+  return true;
+}
+
+export function deleteNibox(ast: Ast.Root, frameIndex: number, niboxIndex: number): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  if (!frame) return false;
+  const node = frameNiboxes(frame)[niboxIndex];
+  if (!node) return false;
+  const at = frame.content.indexOf(node);
+  if (at < 0) return false;
+  let start = at;
+  let count = 1;
+  if (start > 0 && isSpacing(frame.content[start - 1])) {
+    start -= 1;
+    count += 1;
+  }
+  frame.content.splice(start, count);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// The shared operation set. Every edit — from the UI, the CLI, or an AI agent —
+// is one of these ops applied to the AST. Keeping the type and the dispatcher
+// here makes `@nitex-studio/editing` the single source of truth for "what can be
+// done to a deck"; the dev server, CLI and (future) MCP server all call applyOp.
+// ---------------------------------------------------------------------------
+
+export type TexEditOp =
+  | { kind: 'title'; frameIndex: number; value: string }
+  | { kind: 'text'; frameIndex: number; prevText: string; value: string }
+  | { kind: 'fontSize'; frameIndex: number; size: FontSize }
+  | { kind: 'color'; frameIndex: number; color: string }
+  | { kind: 'reorder'; from: number; to: number }
+  | { kind: 'duplicate'; frameIndex: number }
+  | { kind: 'delete'; frameIndex: number }
+  | { kind: 'runColor'; frameIndex: number; runText: string; color: string }
+  | { kind: 'runFontSize'; frameIndex: number; runText: string; size: FontSize }
+  | { kind: 'runBold'; frameIndex: number; runText: string }
+  | { kind: 'insert'; frameIndex: number; snippet: string }
+  | { kind: 'addFrame'; snippet: string; afterIndex: number }
+  | { kind: 'deleteComponent'; frameIndex: number; componentIndex: number }
+  | { kind: 'insertNibox'; frameIndex: number; x: number; y: number; w: number; content: string }
+  | { kind: 'moveNibox'; frameIndex: number; niboxIndex: number; x: number; y: number }
+  | { kind: 'resizeNibox'; frameIndex: number; niboxIndex: number; w: number }
+  | { kind: 'deleteNibox'; frameIndex: number; niboxIndex: number };
+
+/** Apply one edit op to the AST in place. Returns whether anything changed. */
+export function applyOp(ast: Ast.Root, op: TexEditOp): boolean {
+  switch (op.kind) {
+    case 'title':
+      return editFrameTitle(ast, op.frameIndex, op.value);
+    case 'text':
+      return editFrameText(ast, op.frameIndex, op.prevText, op.value);
+    case 'fontSize':
+      return setFrameFontSize(ast, op.frameIndex, op.size);
+    case 'color':
+      return setFrameColor(ast, op.frameIndex, op.color);
+    case 'reorder':
+      return reorderFrame(ast, op.from, op.to);
+    case 'duplicate':
+      return duplicateFrame(ast, op.frameIndex);
+    case 'delete':
+      return deleteFrame(ast, op.frameIndex);
+    case 'runColor':
+      return setRunColor(ast, op.frameIndex, op.runText, op.color);
+    case 'runFontSize':
+      return setRunFontSize(ast, op.frameIndex, op.runText, op.size);
+    case 'runBold':
+      return toggleRunBold(ast, op.frameIndex, op.runText);
+    case 'insert':
+      return insertIntoFrame(ast, op.frameIndex, op.snippet);
+    case 'addFrame':
+      return addFrame(ast, op.snippet, op.afterIndex);
+    case 'deleteComponent':
+      return deleteFrameComponent(ast, op.frameIndex, op.componentIndex);
+    case 'insertNibox':
+      return insertNibox(ast, op.frameIndex, op.x, op.y, op.w, op.content);
+    case 'moveNibox':
+      return moveNibox(ast, op.frameIndex, op.niboxIndex, op.x, op.y);
+    case 'resizeNibox':
+      return resizeNibox(ast, op.frameIndex, op.niboxIndex, op.w);
+    case 'deleteNibox':
+      return deleteNibox(ast, op.frameIndex, op.niboxIndex);
+    default:
+      return false;
+  }
+}
+
+/** Apply an op to a `.tex` source string, returning the reprinted source (or null if unchanged). */
+export function applyOpToSource(src: string, op: TexEditOp): string | null {
+  const ast = parseTex(src);
+  if (!applyOp(ast, op)) return null;
+  const out = printTex(ast);
+  return out === src ? null : out;
 }

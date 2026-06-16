@@ -1,23 +1,42 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, Play } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Play,
+  Redo2,
+  Undo2,
+} from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ComponentPalette } from '../components/component-palette';
 import { EditPanel } from '../components/edit-panel';
+import { Filmstrip } from '../components/filmstrip';
+import { NiboxOverlay } from '../components/nibox-overlay';
 import { Button } from '../components/ui/button';
 import { PdfCanvas } from '../lib/pdf';
 import { useDeck } from '../lib/use-deck';
-import { locate } from '../lib/use-locate';
+import { useEdit, useHistory } from '../lib/use-edit';
+import { useOutline } from '../lib/use-outline';
+import { usePageMap } from '../lib/use-pagemap';
 
 export function Viewer() {
   const { id = '' } = useParams();
   const { doc, error, loading } = useDeck(id);
+  const { frameForPage } = usePageMap(id);
+  const { undo, redo } = useHistory(id);
+  const edit = useEdit(id);
+  const { frames } = useOutline(id);
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
-  const [selectedFrame, setSelectedFrame] = useState(0);
 
   const pageCount = doc?.numPages ?? 1;
   const raw = Number(params.get('p') ?? '1') - 1;
   const page = Number.isFinite(raw) ? Math.max(0, Math.min(pageCount - 1, raw)) : 0;
+  // The inspector + palette follow the slide currently shown in the preview.
+  const activeFrame = frameForPage(page + 1);
+  const niboxes = frames[activeFrame]?.niboxes ?? [];
 
   const goTo = useCallback(
     (i: number) => {
@@ -34,10 +53,29 @@ export function Viewer() {
     [pageCount, setParams],
   );
 
+  // Drag a thumbnail onto another → reorder the underlying frames (page→frame via the map).
+  const reorderByPage = useCallback(
+    (fromPage: number, toPage: number) => {
+      const from = frameForPage(fromPage + 1);
+      const to = frameForPage(toPage + 1);
+      if (from !== to) {
+        void edit({ kind: 'reorder', from, to });
+        goTo(toPage);
+      }
+    },
+    [frameForPage, edit, goTo],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        void (e.shiftKey ? redo() : undo());
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        void redo();
+      } else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
         e.preventDefault();
         goTo(page + 1);
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
@@ -47,7 +85,7 @@ export function Viewer() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [page, goTo]);
+  }, [page, goTo, undo, redo]);
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -60,6 +98,27 @@ export function Viewer() {
         </Button>
         <span className="font-heading text-[13px] font-semibold tracking-tight">{id}</span>
         <span className="flex-1" />
+        {editing && (
+          <>
+            <ComponentPalette deckId={id} activeFrame={activeFrame} />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Desfazer (Ctrl+Z)"
+              onClick={() => void undo()}
+            >
+              <Undo2 className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Refazer (Ctrl+Shift+Z)"
+              onClick={() => void redo()}
+            >
+              <Redo2 className="size-3.5" />
+            </Button>
+          </>
+        )}
         <Button
           variant={editing ? 'default' : 'ghost'}
           size="sm"
@@ -77,7 +136,13 @@ export function Viewer() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <ComponentPalette deckId={id} open={editing} selectedFrame={selectedFrame} />
+        <Filmstrip
+          doc={doc}
+          page={page}
+          count={pageCount}
+          onSelect={goTo}
+          onReorder={reorderByPage}
+        />
         <main className="paper relative min-h-0 min-w-0 flex-1 bg-canvas">
           <div className="absolute inset-0 p-6">
             {error ? (
@@ -90,13 +155,19 @@ export function Viewer() {
               <PdfCanvas
                 doc={doc}
                 page={page + 1}
-                onPick={
-                  editing
-                    ? async (pick) => {
-                        const idx = await locate(id, pick.page, pick.x, pick.y);
-                        if (idx != null) setSelectedFrame(idx);
+                onActivate={editing ? undefined : () => setEditing(true)}
+                overlay={
+                  editing ? (
+                    <NiboxOverlay
+                      niboxes={niboxes}
+                      onMove={(i, x, y) =>
+                        edit({ kind: 'moveNibox', frameIndex: activeFrame, niboxIndex: i, x, y })
                       }
-                    : undefined
+                      onResize={(i, w) =>
+                        edit({ kind: 'resizeNibox', frameIndex: activeFrame, niboxIndex: i, w })
+                      }
+                    />
+                  ) : undefined
                 }
               />
             ) : (
@@ -107,6 +178,13 @@ export function Viewer() {
               </div>
             )}
           </div>
+
+          {loading && doc && !error && (
+            <div className="-translate-x-1/2 absolute top-4 left-1/2 flex items-center gap-2 rounded-full border border-hairline bg-sidebar/90 px-3 py-1.5 shadow-floating backdrop-blur-md">
+              <Loader2 className="size-3.5 animate-spin text-brand" />
+              <span className="text-[12px] text-muted-foreground">compilando…</span>
+            </div>
+          )}
 
           {doc && !error && (
             <div className="-translate-x-1/2 absolute bottom-4 left-1/2 flex items-center gap-1 rounded-full border border-hairline bg-sidebar/90 px-1.5 py-1 shadow-floating backdrop-blur-md">
@@ -133,12 +211,7 @@ export function Viewer() {
           )}
         </main>
 
-        <EditPanel
-          deckId={id}
-          open={editing}
-          selected={selectedFrame}
-          onSelect={setSelectedFrame}
-        />
+        <EditPanel deckId={id} open={editing} active={activeFrame} />
       </div>
     </div>
   );

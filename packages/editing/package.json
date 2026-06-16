@@ -1,7 +1,7 @@
 {
-  "name": "@open-beamer/editing",
+  "name": "@nitex-studio/editing",
   "version": "0.0.0",
-  "description": "Programmatic .tex editing for open-beamer via the unified-latex AST.",
+  "description": "Programmatic .tex editing for nitex-studio via the unified-latex AST.",
   "type": "module",
   "exports": {
     ".": {
@@ -26,12 +26,13 @@
     "access": "public"
   },
   "devDependencies": {
-    "@open-beamer/engine": "workspace:*",
+    "@nitex-studio/engine": "workspace:*",
     "@types/node": "^22.19.17",
     "tsdown": "^0.9.9",
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@nitex/nitex": "workspace:*",
     "@unified-latex/unified-latex-types": "^1.8.4",
     "@unified-latex/unified-latex-util-parse": "^1.8.4",
     "@unified-latex/unified-latex-util-replace": "^1.8.4",

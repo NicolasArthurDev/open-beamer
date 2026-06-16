@@ -5,6 +5,7 @@ import {
   List,
   ListOrdered,
   type LucideIcon,
+  Move,
   Plus,
   Quote,
   SquareStack,
@@ -15,8 +16,12 @@ export type ComponentDef = {
   label: string;
   icon: LucideIcon;
   category: string;
-  /** 'deck' inserts a whole new frame; 'frame' inserts into the selected frame's body. */
-  target: 'frame' | 'deck';
+  /**
+   * 'frame' inserts into the active frame's body; 'deck' adds a frame after the active one;
+   * 'deck-start' adds a frame at the very beginning of the deck; 'nibox' inserts a NiTeX
+   * positioned box (draggable) using `snippet` as its initial content.
+   */
+  target: 'frame' | 'deck' | 'deck-start' | 'nibox';
   snippet: string;
 };
 
@@ -28,6 +33,14 @@ export const COMPONENTS: ComponentDef[] = [
     icon: Plus,
     category: 'Slide',
     target: 'deck',
+    snippet: '\\begin{frame}{Novo slide}\n  \n\\end{frame}',
+  },
+  {
+    id: 'new-slide-start',
+    label: 'Slide no início',
+    icon: Plus,
+    category: 'Slide',
+    target: 'deck-start',
     snippet: '\\begin{frame}{Novo slide}\n  \n\\end{frame}',
   },
   {
@@ -64,6 +77,14 @@ export const COMPONENTS: ComponentDef[] = [
     category: 'Layout',
     target: 'frame',
     snippet: '\\begin{block}{Título}\n  Conteúdo do bloco.\n\\end{block}',
+  },
+  {
+    id: 'free-box',
+    label: 'Caixa livre',
+    icon: Move,
+    category: 'Layout',
+    target: 'nibox',
+    snippet: 'Caixa livre',
   },
   {
     id: 'big-number',

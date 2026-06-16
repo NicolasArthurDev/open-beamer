@@ -3,7 +3,7 @@ import { dev } from './dev.ts';
 
 export async function run(argv: string[]): Promise<void> {
   const program = new Command();
-  program.name('open-beamer').description('open-beamer dev server and live PDF preview');
+  program.name('nitex-studio').description('nitex-studio dev server and live PDF preview');
 
   program
     .command('dev')

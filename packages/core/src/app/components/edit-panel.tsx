@@ -1,9 +1,17 @@
-import { Bold, ChevronDown, ChevronUp, Copy, Crosshair, Minus, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  Bold,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Minus,
+  Plus,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react';
+import { useState } from 'react';
 import { useEdit } from '../lib/use-edit';
 import { useOutline } from '../lib/use-outline';
-import { cn } from '../lib/utils';
-import { Field, Section } from './panel/panel-fields';
+import { Field, NumberField, Section } from './panel/panel-fields';
 import { PanelShell, usePanelMount } from './panel/panel-shell';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -19,7 +27,7 @@ const SIZES = [
   'LARGE',
   'huge',
   'Huge',
-];
+] as const;
 const COLORS = ['black', 'red', 'blue', 'teal', 'orange', 'gray'];
 
 function Swatch({ color, onClick }: { color: string; onClick: () => void }) {
@@ -34,16 +42,15 @@ function Swatch({ color, onClick }: { color: string; onClick: () => void }) {
   );
 }
 
+/** The inspector follows the active slide (`active` = the frame shown in the preview). */
 export function EditPanel({
   deckId,
   open,
-  selected,
-  onSelect,
+  active,
 }: {
   deckId: string;
   open: boolean;
-  selected: number;
-  onSelect: (index: number) => void;
+  active: number;
 }) {
   const { frames } = useOutline(deckId);
   const edit = useEdit(deckId);
@@ -51,13 +58,9 @@ export function EditPanel({
   const [runSizes, setRunSizes] = useState<Record<string, number>>({});
   const { mounted, animVisible } = usePanelMount(open);
 
-  useEffect(() => {
-    if (frames.length && selected > frames.length - 1) onSelect(frames.length - 1);
-  }, [frames.length, selected, onSelect]);
-
   if (!mounted) return null;
 
-  const sel = Math.max(0, Math.min(selected, frames.length - 1));
+  const sel = Math.max(0, Math.min(active, frames.length - 1));
   const frame = frames[sel];
 
   const commitTitle = (value: string) => {
@@ -86,35 +89,15 @@ export function EditPanel({
       animVisible={animVisible}
       header={
         <div className="flex items-center gap-2">
-          <Crosshair className="size-3.5 text-muted-foreground" />
+          <SlidersHorizontal className="size-3.5 text-muted-foreground" />
           <span className="font-heading text-[12px] font-semibold tracking-tight">Inspector</span>
+          {frame && <span className="folio ml-auto">slide {sel + 1}</span>}
         </div>
       }
     >
-      <Section title="Frames">
-        <div className="flex flex-col gap-0.5">
-          {frames.map((f) => (
-            <button
-              type="button"
-              key={f.index}
-              onClick={() => onSelect(f.index)}
-              className={cn(
-                'flex items-center gap-2 rounded-[5px] px-2 py-1.5 text-left text-[12px] transition-colors',
-                f.index === sel
-                  ? 'bg-muted text-foreground ring-1 ring-brand/40'
-                  : 'text-muted-foreground hover:bg-muted/60',
-              )}
-            >
-              <span className="folio">{f.index + 1}</span>
-              <span className="truncate">
-                {f.title || <em className="opacity-60">sem título</em>}
-              </span>
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      {frame && (
+      {!frame ? (
+        <div className="px-3.5 py-6 text-[12px] text-muted-foreground">Sem slide.</div>
+      ) : (
         <>
           <Section title="Título">
             <Input
@@ -169,6 +152,114 @@ export function EditPanel({
                         }
                       />
                     ))}
+                  </div>
+                </div>
+              ))}
+            </Section>
+          )}
+
+          {frame.components.length > 0 && (
+            <Section title="Componentes">
+              {frame.components.map((c) => (
+                <div
+                  className="flex items-center justify-between gap-2"
+                  key={`comp-${frame.index}-${c.index}`}
+                >
+                  <span className="text-[12px] text-muted-foreground">{c.label}</span>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    title="excluir componente"
+                    className="text-destructive"
+                    onClick={() =>
+                      edit({
+                        kind: 'deleteComponent',
+                        frameIndex: frame.index,
+                        componentIndex: c.index,
+                      })
+                    }
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
+              ))}
+            </Section>
+          )}
+
+          {frame.niboxes.length > 0 && (
+            <Section title="Caixas">
+              {frame.niboxes.map((b) => (
+                <div
+                  key={`nibox-${frame.index}-${b.index}`}
+                  className="flex flex-col gap-1.5 rounded-md border border-hairline p-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[12px] text-muted-foreground">
+                      {b.text || 'caixa'}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      title="excluir caixa"
+                      className="text-destructive"
+                      onClick={() =>
+                        edit({ kind: 'deleteNibox', frameIndex: frame.index, niboxIndex: b.index })
+                      }
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      x
+                      <NumberField
+                        value={b.x}
+                        min={0}
+                        max={100}
+                        onChange={(x) =>
+                          edit({
+                            kind: 'moveNibox',
+                            frameIndex: frame.index,
+                            niboxIndex: b.index,
+                            x,
+                            y: b.y,
+                          })
+                        }
+                      />
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      y
+                      <NumberField
+                        value={b.y}
+                        min={0}
+                        max={100}
+                        onChange={(y) =>
+                          edit({
+                            kind: 'moveNibox',
+                            frameIndex: frame.index,
+                            niboxIndex: b.index,
+                            x: b.x,
+                            y,
+                          })
+                        }
+                      />
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      L
+                      <NumberField
+                        value={b.w}
+                        min={5}
+                        max={100}
+                        onChange={(w) =>
+                          edit({
+                            kind: 'resizeNibox',
+                            frameIndex: frame.index,
+                            niboxIndex: b.index,
+                            w,
+                          })
+                        }
+                      />
+                    </span>
                   </div>
                 </div>
               ))}

@@ -1,18 +1,7 @@
+import type { TexEditOp } from '@nitex-studio/editing';
 import { useCallback } from 'react';
 
-export type TexEditOp =
-  | { kind: 'title'; frameIndex: number; value: string }
-  | { kind: 'text'; frameIndex: number; prevText: string; value: string }
-  | { kind: 'fontSize'; frameIndex: number; size: string }
-  | { kind: 'color'; frameIndex: number; color: string }
-  | { kind: 'reorder'; from: number; to: number }
-  | { kind: 'duplicate'; frameIndex: number }
-  | { kind: 'delete'; frameIndex: number }
-  | { kind: 'runColor'; frameIndex: number; runText: string; color: string }
-  | { kind: 'runFontSize'; frameIndex: number; runText: string; size: string }
-  | { kind: 'runBold'; frameIndex: number; runText: string }
-  | { kind: 'insert'; frameIndex: number; snippet: string }
-  | { kind: 'addFrame'; snippet: string; afterIndex: number };
+export type { TexEditOp };
 
 export function useEdit(deckId: string) {
   return useCallback(
@@ -27,4 +16,24 @@ export function useEdit(deckId: string) {
     },
     [deckId],
   );
+}
+
+/** Undo / redo the deck's last source change (server keeps the snapshot history). */
+export function useHistory(deckId: string) {
+  const step = useCallback(
+    async (dir: 'undo' | 'redo'): Promise<boolean> => {
+      const res = await fetch(`/__${dir}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ deckId }),
+      });
+      const data = (await res.json()) as { ok: boolean; changed?: boolean };
+      return Boolean(data.changed);
+    },
+    [deckId],
+  );
+  return {
+    undo: useCallback(() => step('undo'), [step]),
+    redo: useCallback(() => step('redo'), [step]),
+  };
 }

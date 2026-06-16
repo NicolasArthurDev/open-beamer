@@ -2,20 +2,29 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { compile } from '@open-beamer/engine';
+import { compile } from '@nitex-studio/engine';
 import { describe, expect, it } from 'vitest';
 import {
   addFrame,
+  applyOp,
+  applyOpToSource,
   deleteFrame,
+  deleteFrameComponent,
+  deleteNibox,
   duplicateFrame,
   editFrameText,
   editFrameTitle,
   frameAtLine,
+  frameBeginLines,
   insertIntoFrame,
+  insertNibox,
   listFrames,
+  listNiboxes,
+  moveNibox,
   parseTex,
   printTex,
   reorderFrame,
+  resizeNibox,
   setFrameColor,
   setFrameFontSize,
   setRunColor,
@@ -135,13 +144,15 @@ describe('nested body text (itemize/block/columns)', () => {
     expect(frames[0].texts).toContain('Second topic');
   });
 
-  it('edits a nested bullet in place', () => {
+  it('edits a nested bullet in place without gluing onto \\item', () => {
     const ast = parseTex(NESTED);
     expect(editFrameText(ast, 0, 'First topic', 'Edited topic')).toBe(true);
     const out = printTex(ast);
     expect(out).toContain('Edited topic');
     expect(out).not.toContain('First topic');
     expect(out).toContain('Second topic'); // the other bullet is untouched
+    // regression: must not produce `\itemEdited` (control word eating the text)
+    expect(out).not.toMatch(/\\item[A-Za-z]/);
   });
 });
 
@@ -207,6 +218,89 @@ describe('inserting components', () => {
     const ast = parseTex(SAMPLE);
     expect(addFrame(ast, '\\begin{frame}{Gamma}\nHi there.\n\\end{frame}', 0)).toBe(true);
     expect(listFrames(ast).map((f) => f.title)).toEqual(['Alpha', 'Gamma', 'Beta']);
+  });
+
+  it('prepends a new frame at the beginning when afterIndex < 0', () => {
+    const ast = parseTex(SAMPLE);
+    expect(addFrame(ast, '\\begin{frame}{Intro}\nHi.\n\\end{frame}', -1)).toBe(true);
+    expect(listFrames(ast).map((f) => f.title)).toEqual(['Intro', 'Alpha', 'Beta']);
+  });
+
+  it('lists inserted components and deletes one by index', () => {
+    const ast = parseTex(SAMPLE);
+    insertIntoFrame(ast, 0, '\\begin{itemize}\\item One\\end{itemize}');
+    insertIntoFrame(ast, 0, '\\begin{block}{T}\nBody.\n\\end{block}');
+    expect(listFrames(ast)[0].components.map((c) => c.env)).toEqual(['itemize', 'block']);
+
+    // delete the first component (the itemize); the block survives
+    expect(deleteFrameComponent(ast, 0, 0)).toBe(true);
+    const after = listFrames(ast)[0];
+    expect(after.components.map((c) => c.env)).toEqual(['block']);
+    const out = printTex(ast);
+    expect(out).not.toContain('\\begin{itemize}');
+    expect(out).toContain('\\begin{block}');
+    expect(out).toContain('Hello world.'); // original body text untouched
+  });
+});
+
+describe('NiTeX niboxes', () => {
+  it('inserts, lists, moves, resizes, clamps and deletes a nibox', () => {
+    const ast = parseTex(SAMPLE);
+    expect(insertNibox(ast, 0, 10.5, 80, 40, 'Caixa')).toBe(true);
+    expect(listNiboxes(ast, 0)).toHaveLength(1);
+    expect(listNiboxes(ast, 0)[0]).toMatchObject({
+      index: 0,
+      x: 10.5,
+      y: 80,
+      w: 40,
+      text: 'Caixa',
+    });
+    expect(printTex(ast)).toContain('\\nibox');
+
+    expect(moveNibox(ast, 0, 0, 25, 60)).toBe(true);
+    expect(listNiboxes(ast, 0)[0]).toMatchObject({ x: 25, y: 60 });
+
+    expect(resizeNibox(ast, 0, 0, 55)).toBe(true);
+    expect(listNiboxes(ast, 0)[0].w).toBe(55);
+
+    // out-of-range coordinates clamp into the 0..100 plane
+    moveNibox(ast, 0, 0, -5, 150);
+    expect(listNiboxes(ast, 0)[0]).toMatchObject({ x: 0, y: 100 });
+
+    expect(deleteNibox(ast, 0, 0)).toBe(true);
+    expect(listNiboxes(ast, 0)).toHaveLength(0);
+  });
+
+  it('surfaces niboxes in listFrames', () => {
+    const ast = parseTex(SAMPLE);
+    insertNibox(ast, 1, 5, 5, 30, 'Rodapé');
+    expect(listFrames(ast)[1].niboxes.map((b) => b.text)).toEqual(['Rodapé']);
+    expect(listFrames(ast)[0].niboxes).toEqual([]);
+  });
+});
+
+describe('applyOp (shared op layer)', () => {
+  it('dispatches an op to the AST (title)', () => {
+    const ast = parseTex(SAMPLE);
+    expect(applyOp(ast, { kind: 'title', frameIndex: 0, value: 'Renamed' })).toBe(true);
+    expect(listFrames(ast)[0].title).toBe('Renamed');
+  });
+
+  it('applyOpToSource reprints, or returns null when nothing changed', () => {
+    const out = applyOpToSource(SAMPLE, { kind: 'title', frameIndex: 0, value: 'Renamed' });
+    expect(out).not.toBeNull();
+    expect(out).toContain('Renamed');
+    // a no-op (same title) yields null
+    expect(applyOpToSource(SAMPLE, { kind: 'title', frameIndex: 0, value: 'Alpha' })).toBeNull();
+    // an out-of-range frame yields null
+    expect(applyOpToSource(SAMPLE, { kind: 'delete', frameIndex: 99 })).toBeNull();
+  });
+});
+
+describe('frameBeginLines', () => {
+  it('returns the 1-based line of each \\begin{frame} in order', () => {
+    // SAMPLE: line 3 = \begin{frame}{Alpha}, line 6 = \begin{frame}
+    expect(frameBeginLines(SAMPLE)).toEqual([3, 6]);
   });
 });
 

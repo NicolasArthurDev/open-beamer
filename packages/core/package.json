@@ -1,7 +1,7 @@
 {
-  "name": "@open-beamer/core",
+  "name": "@nitex-studio/core",
   "version": "0.0.0",
-  "description": "Dev server and live PDF preview runtime for open-beamer.",
+  "description": "Dev server and live PDF preview runtime for nitex-studio.",
   "type": "module",
   "exports": {
     ".": {
@@ -14,7 +14,7 @@
     }
   },
   "bin": {
-    "open-beamer": "./dist/cli/bin.js"
+    "nitex-studio": "./dist/cli/bin.js"
   },
   "files": [
     "dist",
@@ -35,8 +35,9 @@
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",
-    "@open-beamer/editing": "workspace:*",
-    "@open-beamer/engine": "workspace:*",
+    "@nitex-studio/editing": "workspace:*",
+    "@nitex-studio/engine": "workspace:*",
+    "@nitex/nitex": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
     "@vitejs/plugin-react": "^4.3.3",
     "chalk": "^5.3.0",

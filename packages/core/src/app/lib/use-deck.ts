@@ -35,12 +35,19 @@ export function useDeck(id: string) {
 
   useEffect(() => {
     if (!import.meta.hot) return;
-    const handler = (data: { id?: string } | undefined) => {
+    const onChanged = (data: { id?: string } | undefined) => {
       if (data?.id === id) void refresh();
     };
-    import.meta.hot.on('open-beamer:deck-changed', handler);
+    // A compile started server-side — show the loading state for its full duration,
+    // not just the brief PDF fetch that `deck-changed` triggers.
+    const onCompiling = (data: { id?: string } | undefined) => {
+      if (data?.id === id) setLoading(true);
+    };
+    import.meta.hot.on('nitex-studio:deck-changed', onChanged);
+    import.meta.hot.on('nitex-studio:deck-compiling', onCompiling);
     return () => {
-      import.meta.hot?.off('open-beamer:deck-changed', handler);
+      import.meta.hot?.off('nitex-studio:deck-changed', onChanged);
+      import.meta.hot?.off('nitex-studio:deck-compiling', onCompiling);
     };
   }, [id, refresh]);
 
