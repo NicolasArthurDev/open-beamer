@@ -27,7 +27,7 @@ const SIZES = [
   'LARGE',
   'huge',
   'Huge',
-];
+] as const;
 const COLORS = ['black', 'red', 'blue', 'teal', 'orange', 'gray'];
 
 function Swatch({ color, onClick }: { color: string; onClick: () => void }) {

@@ -2,26 +2,14 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
+import type { ServerResponse } from 'node:http';
 import path from 'node:path';
 import {
-  addFrame,
-  deleteFrame,
-  deleteFrameComponent,
-  duplicateFrame,
-  editFrameText,
-  editFrameTitle,
-  type FontSize,
+  applyOpToSource,
   frameBeginLines,
-  insertIntoFrame,
   listFrames,
   parseTex,
-  printTex,
-  reorderFrame,
-  setFrameColor,
-  setFrameFontSize,
-  setRunColor,
-  setRunFontSize,
-  toggleRunBold,
+  type TexEditOp,
 } from '@open-beamer/editing';
 import { type CompileResult, compile } from '@open-beamer/engine';
 import fg from 'fast-glob';
@@ -30,54 +18,6 @@ import type { OpenBeamerConfig } from '../config.ts';
 import { validateMutationRequest } from '../http/request-guard.ts';
 
 const CONFIG_FILE = 'open-beamer.config.ts';
-
-export type TexEditOp =
-  | { kind: 'title'; frameIndex: number; value: string }
-  | { kind: 'text'; frameIndex: number; prevText: string; value: string }
-  | { kind: 'fontSize'; frameIndex: number; size: FontSize }
-  | { kind: 'color'; frameIndex: number; color: string }
-  | { kind: 'reorder'; from: number; to: number }
-  | { kind: 'duplicate'; frameIndex: number }
-  | { kind: 'delete'; frameIndex: number }
-  | { kind: 'runColor'; frameIndex: number; runText: string; color: string }
-  | { kind: 'runFontSize'; frameIndex: number; runText: string; size: FontSize }
-  | { kind: 'runBold'; frameIndex: number; runText: string }
-  | { kind: 'insert'; frameIndex: number; snippet: string }
-  | { kind: 'addFrame'; snippet: string; afterIndex: number }
-  | { kind: 'deleteComponent'; frameIndex: number; componentIndex: number };
-
-function applyOp(ast: ReturnType<typeof parseTex>, op: TexEditOp): boolean {
-  switch (op.kind) {
-    case 'title':
-      return editFrameTitle(ast, op.frameIndex, op.value);
-    case 'text':
-      return editFrameText(ast, op.frameIndex, op.prevText, op.value);
-    case 'fontSize':
-      return setFrameFontSize(ast, op.frameIndex, op.size);
-    case 'color':
-      return setFrameColor(ast, op.frameIndex, op.color);
-    case 'reorder':
-      return reorderFrame(ast, op.from, op.to);
-    case 'duplicate':
-      return duplicateFrame(ast, op.frameIndex);
-    case 'delete':
-      return deleteFrame(ast, op.frameIndex);
-    case 'runColor':
-      return setRunColor(ast, op.frameIndex, op.runText, op.color);
-    case 'runFontSize':
-      return setRunFontSize(ast, op.frameIndex, op.runText, op.size);
-    case 'runBold':
-      return toggleRunBold(ast, op.frameIndex, op.runText);
-    case 'insert':
-      return insertIntoFrame(ast, op.frameIndex, op.snippet);
-    case 'addFrame':
-      return addFrame(ast, op.snippet, op.afterIndex);
-    case 'deleteComponent':
-      return deleteFrameComponent(ast, op.frameIndex, op.componentIndex);
-    default:
-      return false;
-  }
-}
 
 async function readBody(req: Connect.IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -120,8 +60,34 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
   const inflight = new Map<string, Promise<DeckState>>();
   // PDF page → frame index per deck (0-based), cached by source hash.
   const pageMapCache = new Map<string, { hash: string; pageToFrame: number[] }>();
+  // Per-deck undo/redo history — snapshots of main.tex (text is cheap and bulletproof).
+  const history = new Map<string, { undo: string[]; redo: string[] }>();
+  const HISTORY_LIMIT = 50;
 
   const deckMain = (id: string) => path.join(presentationsRoot, id, 'main.tex');
+
+  /** Record the pre-edit source so it can be undone; a fresh edit drops the redo stack. */
+  function recordHistory(id: string, prevSrc: string): void {
+    const h = history.get(id) ?? { undo: [], redo: [] };
+    h.undo.push(prevSrc);
+    if (h.undo.length > HISTORY_LIMIT) h.undo.shift();
+    h.redo = [];
+    history.set(id, h);
+  }
+
+  /** Restore the previous (undo) or next (redo) source snapshot. Returns whether it moved. */
+  async function stepHistory(id: string, dir: 'undo' | 'redo'): Promise<boolean> {
+    const h = history.get(id);
+    const from = dir === 'undo' ? h?.undo : h?.redo;
+    if (!h || !from || from.length === 0) return false;
+    const file = deckMain(id);
+    if (!existsSync(file)) return false;
+    const current = await readFile(file, 'utf8');
+    const target = from.pop() as string;
+    (dir === 'undo' ? h.redo : h.undo).push(current);
+    await writeFile(file, target, 'utf8'); // the watcher recompiles + notifies
+    return true;
+  }
 
   const deckIdForPath = (p: string): string | null => {
     const rel = path.relative(presentationsRoot, p);
@@ -328,18 +294,40 @@ export function openBeamerPlugin(opts: OpenBeamerPluginOptions): Plugin {
           return;
         }
         const src = await readFile(file, 'utf8');
-        const ast = parseTex(src);
-        let written = false;
-        if (applyOp(ast, body.op)) {
-          const updated = printTex(ast);
-          if (updated !== src) {
-            await writeFile(file, updated, 'utf8');
-            written = true;
-          }
+        const updated = applyOpToSource(src, body.op);
+        if (updated !== null) {
+          recordHistory(body.deckId as string, src); // snapshot for undo
+          await writeFile(file, updated, 'utf8');
         }
         // The file watcher picks up the write and triggers recompile + ws notify.
-        res.end(JSON.stringify({ ok: true, changed: written }));
+        res.end(JSON.stringify({ ok: true, changed: updated !== null }));
       });
+
+      // Undo / redo — restore a source snapshot. The watcher handles recompile + notify.
+      const historyRoute =
+        (dir: 'undo' | 'redo') =>
+        async (req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
+          if (req.method !== 'POST') return next();
+          res.setHeader('content-type', 'application/json');
+          const guard = validateMutationRequest(req, { requireJsonBody: true });
+          if (!guard.ok) {
+            res.statusCode = guard.status;
+            res.end(JSON.stringify({ ok: false, error: guard.error }));
+            return;
+          }
+          let id = '';
+          try {
+            id = (JSON.parse(await readBody(req)) as { deckId?: string }).deckId ?? '';
+          } catch {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ ok: false, error: 'invalid json' }));
+            return;
+          }
+          const changed = id ? await stepHistory(id, dir) : false;
+          res.end(JSON.stringify({ ok: true, changed }));
+        };
+      server.middlewares.use('/__undo', historyRoute('undo'));
+      server.middlewares.use('/__redo', historyRoute('redo'));
     },
   };
 }

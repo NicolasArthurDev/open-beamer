@@ -561,3 +561,67 @@ export function reorderFrame(ast: Ast.Root, from: number, to: number): boolean {
   arr.splice(from < to ? ti + 1 : ti, 0, a.node);
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// The shared operation set. Every edit — from the UI, the CLI, or an AI agent —
+// is one of these ops applied to the AST. Keeping the type and the dispatcher
+// here makes `@open-beamer/editing` the single source of truth for "what can be
+// done to a deck"; the dev server, CLI and (future) MCP server all call applyOp.
+// ---------------------------------------------------------------------------
+
+export type TexEditOp =
+  | { kind: 'title'; frameIndex: number; value: string }
+  | { kind: 'text'; frameIndex: number; prevText: string; value: string }
+  | { kind: 'fontSize'; frameIndex: number; size: FontSize }
+  | { kind: 'color'; frameIndex: number; color: string }
+  | { kind: 'reorder'; from: number; to: number }
+  | { kind: 'duplicate'; frameIndex: number }
+  | { kind: 'delete'; frameIndex: number }
+  | { kind: 'runColor'; frameIndex: number; runText: string; color: string }
+  | { kind: 'runFontSize'; frameIndex: number; runText: string; size: FontSize }
+  | { kind: 'runBold'; frameIndex: number; runText: string }
+  | { kind: 'insert'; frameIndex: number; snippet: string }
+  | { kind: 'addFrame'; snippet: string; afterIndex: number }
+  | { kind: 'deleteComponent'; frameIndex: number; componentIndex: number };
+
+/** Apply one edit op to the AST in place. Returns whether anything changed. */
+export function applyOp(ast: Ast.Root, op: TexEditOp): boolean {
+  switch (op.kind) {
+    case 'title':
+      return editFrameTitle(ast, op.frameIndex, op.value);
+    case 'text':
+      return editFrameText(ast, op.frameIndex, op.prevText, op.value);
+    case 'fontSize':
+      return setFrameFontSize(ast, op.frameIndex, op.size);
+    case 'color':
+      return setFrameColor(ast, op.frameIndex, op.color);
+    case 'reorder':
+      return reorderFrame(ast, op.from, op.to);
+    case 'duplicate':
+      return duplicateFrame(ast, op.frameIndex);
+    case 'delete':
+      return deleteFrame(ast, op.frameIndex);
+    case 'runColor':
+      return setRunColor(ast, op.frameIndex, op.runText, op.color);
+    case 'runFontSize':
+      return setRunFontSize(ast, op.frameIndex, op.runText, op.size);
+    case 'runBold':
+      return toggleRunBold(ast, op.frameIndex, op.runText);
+    case 'insert':
+      return insertIntoFrame(ast, op.frameIndex, op.snippet);
+    case 'addFrame':
+      return addFrame(ast, op.snippet, op.afterIndex);
+    case 'deleteComponent':
+      return deleteFrameComponent(ast, op.frameIndex, op.componentIndex);
+    default:
+      return false;
+  }
+}
+
+/** Apply an op to a `.tex` source string, returning the reprinted source (or null if unchanged). */
+export function applyOpToSource(src: string, op: TexEditOp): string | null {
+  const ast = parseTex(src);
+  if (!applyOp(ast, op)) return null;
+  const out = printTex(ast);
+  return out === src ? null : out;
+}

@@ -1,17 +1,30 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Pencil, Play } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Play,
+  Redo2,
+  Undo2,
+} from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ComponentPalette } from '../components/component-palette';
 import { EditPanel } from '../components/edit-panel';
+import { Filmstrip } from '../components/filmstrip';
 import { Button } from '../components/ui/button';
 import { PdfCanvas } from '../lib/pdf';
 import { useDeck } from '../lib/use-deck';
+import { useEdit, useHistory } from '../lib/use-edit';
 import { usePageMap } from '../lib/use-pagemap';
 
 export function Viewer() {
   const { id = '' } = useParams();
   const { doc, error, loading } = useDeck(id);
   const { frameForPage } = usePageMap(id);
+  const { undo, redo } = useHistory(id);
+  const edit = useEdit(id);
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
 
@@ -36,10 +49,29 @@ export function Viewer() {
     [pageCount, setParams],
   );
 
+  // Drag a thumbnail onto another → reorder the underlying frames (page→frame via the map).
+  const reorderByPage = useCallback(
+    (fromPage: number, toPage: number) => {
+      const from = frameForPage(fromPage + 1);
+      const to = frameForPage(toPage + 1);
+      if (from !== to) {
+        void edit({ kind: 'reorder', from, to });
+        goTo(toPage);
+      }
+    },
+    [frameForPage, edit, goTo],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        void (e.shiftKey ? redo() : undo());
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        void redo();
+      } else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
         e.preventDefault();
         goTo(page + 1);
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
@@ -49,7 +81,7 @@ export function Viewer() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [page, goTo]);
+  }, [page, goTo, undo, redo]);
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -62,6 +94,27 @@ export function Viewer() {
         </Button>
         <span className="font-heading text-[13px] font-semibold tracking-tight">{id}</span>
         <span className="flex-1" />
+        {editing && (
+          <>
+            <ComponentPalette deckId={id} activeFrame={activeFrame} />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Desfazer (Ctrl+Z)"
+              onClick={() => void undo()}
+            >
+              <Undo2 className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Refazer (Ctrl+Shift+Z)"
+              onClick={() => void redo()}
+            >
+              <Redo2 className="size-3.5" />
+            </Button>
+          </>
+        )}
         <Button
           variant={editing ? 'default' : 'ghost'}
           size="sm"
@@ -79,7 +132,13 @@ export function Viewer() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <ComponentPalette deckId={id} open={editing} activeFrame={activeFrame} />
+        <Filmstrip
+          doc={doc}
+          page={page}
+          count={pageCount}
+          onSelect={goTo}
+          onReorder={reorderByPage}
+        />
         <main className="paper relative min-h-0 min-w-0 flex-1 bg-canvas">
           <div className="absolute inset-0 p-6">
             {error ? (
@@ -89,7 +148,11 @@ export function Viewer() {
                 </pre>
               </div>
             ) : doc ? (
-              <PdfCanvas doc={doc} page={page + 1} />
+              <PdfCanvas
+                doc={doc}
+                page={page + 1}
+                onActivate={editing ? undefined : () => setEditing(true)}
+              />
             ) : (
               <div className="grid h-full place-items-center">
                 <p className="text-[13px] text-muted-foreground">
