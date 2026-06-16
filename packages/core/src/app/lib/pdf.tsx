@@ -20,10 +20,13 @@ export function PdfCanvas({
   doc,
   page,
   canvasClassName = 'rounded-sm bg-white shadow-[0_10px_50px_-12px_rgba(0,0,0,0.55)] ring-1 ring-black/10',
+  onActivate,
 }: {
   doc: PdfDoc;
   page: number;
   canvasClassName?: string;
+  /** Called when the rendered slide is clicked (e.g. to start editing it). */
+  onActivate?: () => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -72,7 +75,18 @@ export function PdfCanvas({
 
   return (
     <div ref={wrapRef} className="grid h-full w-full place-items-center">
-      <canvas ref={canvasRef} className={canvasClassName} />
+      {onActivate ? (
+        <button
+          type="button"
+          onClick={onActivate}
+          className="cursor-pointer border-0 bg-transparent p-0 leading-none"
+          title="Editar este slide"
+        >
+          <canvas ref={canvasRef} className={canvasClassName} />
+        </button>
+      ) : (
+        <canvas ref={canvasRef} className={canvasClassName} />
+      )}
     </div>
   );
 }

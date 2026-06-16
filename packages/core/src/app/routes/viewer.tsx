@@ -148,7 +148,11 @@ export function Viewer() {
                 </pre>
               </div>
             ) : doc ? (
-              <PdfCanvas doc={doc} page={page + 1} />
+              <PdfCanvas
+                doc={doc}
+                page={page + 1}
+                onActivate={editing ? undefined : () => setEditing(true)}
+              />
             ) : (
               <div className="grid h-full place-items-center">
                 <p className="text-[13px] text-muted-foreground">

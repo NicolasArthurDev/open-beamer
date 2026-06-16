@@ -2,7 +2,7 @@ import { Presentation } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../components/ui/card';
-import { type PdfDoc, PdfCanvas, loadPdf } from '../lib/pdf';
+import { loadPdf, PdfCanvas, type PdfDoc } from '../lib/pdf';
 
 type Deck = { id: string };
 
