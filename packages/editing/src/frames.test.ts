@@ -6,6 +6,8 @@ import { compile } from '@open-beamer/engine';
 import { describe, expect, it } from 'vitest';
 import {
   addFrame,
+  applyOp,
+  applyOpToSource,
   deleteFrame,
   deleteFrameComponent,
   duplicateFrame,
@@ -233,6 +235,24 @@ describe('inserting components', () => {
     expect(out).not.toContain('\\begin{itemize}');
     expect(out).toContain('\\begin{block}');
     expect(out).toContain('Hello world.'); // original body text untouched
+  });
+});
+
+describe('applyOp (shared op layer)', () => {
+  it('dispatches an op to the AST (title)', () => {
+    const ast = parseTex(SAMPLE);
+    expect(applyOp(ast, { kind: 'title', frameIndex: 0, value: 'Renamed' })).toBe(true);
+    expect(listFrames(ast)[0].title).toBe('Renamed');
+  });
+
+  it('applyOpToSource reprints, or returns null when nothing changed', () => {
+    const out = applyOpToSource(SAMPLE, { kind: 'title', frameIndex: 0, value: 'Renamed' });
+    expect(out).not.toBeNull();
+    expect(out).toContain('Renamed');
+    // a no-op (same title) yields null
+    expect(applyOpToSource(SAMPLE, { kind: 'title', frameIndex: 0, value: 'Alpha' })).toBeNull();
+    // an out-of-range frame yields null
+    expect(applyOpToSource(SAMPLE, { kind: 'delete', frameIndex: 99 })).toBeNull();
   });
 });
 

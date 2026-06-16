@@ -1,4 +1,13 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Pencil, Play } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Play,
+  Redo2,
+  Undo2,
+} from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ComponentPalette } from '../components/component-palette';
@@ -6,12 +15,14 @@ import { EditPanel } from '../components/edit-panel';
 import { Button } from '../components/ui/button';
 import { PdfCanvas } from '../lib/pdf';
 import { useDeck } from '../lib/use-deck';
+import { useHistory } from '../lib/use-edit';
 import { usePageMap } from '../lib/use-pagemap';
 
 export function Viewer() {
   const { id = '' } = useParams();
   const { doc, error, loading } = useDeck(id);
   const { frameForPage } = usePageMap(id);
+  const { undo, redo } = useHistory(id);
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
 
@@ -39,7 +50,13 @@ export function Viewer() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        void (e.shiftKey ? redo() : undo());
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        void redo();
+      } else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
         e.preventDefault();
         goTo(page + 1);
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
@@ -49,7 +66,7 @@ export function Viewer() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [page, goTo]);
+  }, [page, goTo, undo, redo]);
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -62,6 +79,26 @@ export function Viewer() {
         </Button>
         <span className="font-heading text-[13px] font-semibold tracking-tight">{id}</span>
         <span className="flex-1" />
+        {editing && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Desfazer (Ctrl+Z)"
+              onClick={() => void undo()}
+            >
+              <Undo2 className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Refazer (Ctrl+Shift+Z)"
+              onClick={() => void redo()}
+            >
+              <Redo2 className="size-3.5" />
+            </Button>
+          </>
+        )}
         <Button
           variant={editing ? 'default' : 'ghost'}
           size="sm"
