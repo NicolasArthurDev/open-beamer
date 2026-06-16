@@ -16,7 +16,7 @@ import { Filmstrip } from '../components/filmstrip';
 import { Button } from '../components/ui/button';
 import { PdfCanvas } from '../lib/pdf';
 import { useDeck } from '../lib/use-deck';
-import { useHistory } from '../lib/use-edit';
+import { useEdit, useHistory } from '../lib/use-edit';
 import { usePageMap } from '../lib/use-pagemap';
 
 export function Viewer() {
@@ -24,6 +24,7 @@ export function Viewer() {
   const { doc, error, loading } = useDeck(id);
   const { frameForPage } = usePageMap(id);
   const { undo, redo } = useHistory(id);
+  const edit = useEdit(id);
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
 
@@ -46,6 +47,19 @@ export function Viewer() {
       );
     },
     [pageCount, setParams],
+  );
+
+  // Drag a thumbnail onto another → reorder the underlying frames (page→frame via the map).
+  const reorderByPage = useCallback(
+    (fromPage: number, toPage: number) => {
+      const from = frameForPage(fromPage + 1);
+      const to = frameForPage(toPage + 1);
+      if (from !== to) {
+        void edit({ kind: 'reorder', from, to });
+        goTo(toPage);
+      }
+    },
+    [frameForPage, edit, goTo],
   );
 
   useEffect(() => {
@@ -118,7 +132,13 @@ export function Viewer() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <Filmstrip doc={doc} page={page} count={pageCount} onSelect={goTo} />
+        <Filmstrip
+          doc={doc}
+          page={page}
+          count={pageCount}
+          onSelect={goTo}
+          onReorder={reorderByPage}
+        />
         <main className="paper relative min-h-0 min-w-0 flex-1 bg-canvas">
           <div className="absolute inset-0 p-6">
             {error ? (
