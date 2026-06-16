@@ -13,10 +13,12 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ComponentPalette } from '../components/component-palette';
 import { EditPanel } from '../components/edit-panel';
 import { Filmstrip } from '../components/filmstrip';
+import { NiboxOverlay } from '../components/nibox-overlay';
 import { Button } from '../components/ui/button';
 import { PdfCanvas } from '../lib/pdf';
 import { useDeck } from '../lib/use-deck';
 import { useEdit, useHistory } from '../lib/use-edit';
+import { useOutline } from '../lib/use-outline';
 import { usePageMap } from '../lib/use-pagemap';
 
 export function Viewer() {
@@ -25,6 +27,7 @@ export function Viewer() {
   const { frameForPage } = usePageMap(id);
   const { undo, redo } = useHistory(id);
   const edit = useEdit(id);
+  const { frames } = useOutline(id);
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
 
@@ -33,6 +36,7 @@ export function Viewer() {
   const page = Number.isFinite(raw) ? Math.max(0, Math.min(pageCount - 1, raw)) : 0;
   // The inspector + palette follow the slide currently shown in the preview.
   const activeFrame = frameForPage(page + 1);
+  const niboxes = frames[activeFrame]?.niboxes ?? [];
 
   const goTo = useCallback(
     (i: number) => {
@@ -152,6 +156,19 @@ export function Viewer() {
                 doc={doc}
                 page={page + 1}
                 onActivate={editing ? undefined : () => setEditing(true)}
+                overlay={
+                  editing ? (
+                    <NiboxOverlay
+                      niboxes={niboxes}
+                      onMove={(i, x, y) =>
+                        edit({ kind: 'moveNibox', frameIndex: activeFrame, niboxIndex: i, x, y })
+                      }
+                      onResize={(i, w) =>
+                        edit({ kind: 'resizeNibox', frameIndex: activeFrame, niboxIndex: i, w })
+                      }
+                    />
+                  ) : undefined
+                }
               />
             ) : (
               <div className="grid h-full place-items-center">

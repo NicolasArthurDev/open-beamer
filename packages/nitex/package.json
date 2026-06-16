@@ -1,16 +1,18 @@
 {
-  "name": "@nitex-studio/editing",
+  "name": "@nitex/nitex",
   "version": "0.0.0",
-  "description": "Programmatic .tex editing for nitex-studio via the unified-latex AST.",
+  "description": "NiTeX — a Cartesian plane for LaTeX. The language layer of NiTeX Studio.",
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./nitex.sty": "./nitex.sty"
   },
   "files": [
     "dist",
+    "nitex.sty",
     "README.md"
   ],
   "scripts": {
@@ -30,13 +32,5 @@
     "@types/node": "^22.19.17",
     "tsdown": "^0.9.9",
     "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "@nitex/nitex": "workspace:*",
-    "@unified-latex/unified-latex-types": "^1.8.4",
-    "@unified-latex/unified-latex-util-parse": "^1.8.4",
-    "@unified-latex/unified-latex-util-replace": "^1.8.4",
-    "@unified-latex/unified-latex-util-to-string": "^1.8.4",
-    "@unified-latex/unified-latex-util-visit": "^1.8.4"
   }
 }

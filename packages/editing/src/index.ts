@@ -1,3 +1,4 @@
+import { clampCoord, NIBOX_MACRO, roundCoord } from '@nitex/nitex';
 import type * as Ast from '@unified-latex/unified-latex-types';
 import { getParser } from '@unified-latex/unified-latex-util-parse';
 import { toString as latexToString } from '@unified-latex/unified-latex-util-to-string';
@@ -5,12 +6,13 @@ import { visit } from '@unified-latex/unified-latex-util-visit';
 
 // unified-latex only attaches arguments to macros it knows the signature of. Beamer's
 // content macros aren't in the default table, so we register the ones we edit. `m` = one
-// mandatory argument.
+// mandatory argument; NiTeX's \nibox takes four (x, y, w, content).
 const parser = getParser({
   macros: {
     frametitle: { signature: 'm' },
     title: { signature: 'm' },
     frame: { signature: 'm' },
+    [NIBOX_MACRO]: { signature: 'm m m m' },
   },
 });
 
@@ -42,6 +44,7 @@ export type FrameInfo = {
   title: string;
   texts: string[];
   components: ComponentInfo[];
+  niboxes: NiboxInfo[];
 };
 
 /** Friendly labels for the environments the palette inserts (fallback: the env name). */
@@ -221,6 +224,7 @@ export function listFrames(ast: Ast.Root): FrameInfo[] {
     title: titleTarget(node)?.get() ?? '',
     texts: frameTextRuns(node).map((r) => r.text),
     components: componentInfos(node),
+    niboxes: niboxInfos(node),
   }));
 }
 
@@ -562,6 +566,121 @@ export function reorderFrame(ast: Ast.Root, from: number, to: number): boolean {
   return true;
 }
 
+// --- NiTeX positioned boxes (\nibox{x}{y}{w}{content}) -------------------
+// Coordinates are 0..100, origin bottom-left, y up; (x,y) = the box's top-left
+// corner; w = width as % of the page. See @nitex/nitex.
+
+export type NiboxInfo = { index: number; x: number; y: number; w: number; text: string };
+
+function frameNiboxes(frame: Ast.Environment): Ast.Macro[] {
+  const out: Ast.Macro[] = [];
+  visit(frame, (node) => {
+    if (node.type === 'macro' && node.content === NIBOX_MACRO && (node.args?.length ?? 0) >= 4) {
+      out.push(node);
+    }
+  });
+  return out;
+}
+
+const argToNumber = (arg: Ast.Argument): number => Number(latexToString(arg.content).trim());
+
+function numberArg(value: number): Ast.Argument {
+  return {
+    type: 'argument',
+    openMark: '{',
+    closeMark: '}',
+    content: [{ type: 'string', content: String(roundCoord(clampCoord(value))) }],
+  };
+}
+
+function niboxInfos(frame: Ast.Environment): NiboxInfo[] {
+  return frameNiboxes(frame).map((n, index) => {
+    const a = n.args as Ast.Argument[];
+    return {
+      index,
+      x: argToNumber(a[0]),
+      y: argToNumber(a[1]),
+      w: argToNumber(a[2]),
+      text: latexToString(a[3].content).trim(),
+    };
+  });
+}
+
+export function listNiboxes(ast: Ast.Root, frameIndex: number): NiboxInfo[] {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  return frame ? niboxInfos(frame) : [];
+}
+
+/** Append a `\nibox{x}{y}{w}{content}` to a frame's body. */
+export function insertNibox(
+  ast: Ast.Root,
+  frameIndex: number,
+  x: number,
+  y: number,
+  w: number,
+  content: string,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  if (!frame) return false;
+  const macro: Ast.Macro = {
+    type: 'macro',
+    content: NIBOX_MACRO,
+    args: [
+      numberArg(x),
+      numberArg(y),
+      numberArg(w),
+      { type: 'argument', openMark: '{', closeMark: '}', content: parseTex(content).content },
+    ],
+  };
+  frame.content.push({ type: 'parbreak' }, macro);
+  return true;
+}
+
+export function moveNibox(
+  ast: Ast.Root,
+  frameIndex: number,
+  niboxIndex: number,
+  x: number,
+  y: number,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  const node = frame && frameNiboxes(frame)[niboxIndex];
+  if (!node?.args) return false;
+  node.args[0] = numberArg(x);
+  node.args[1] = numberArg(y);
+  return true;
+}
+
+export function resizeNibox(
+  ast: Ast.Root,
+  frameIndex: number,
+  niboxIndex: number,
+  w: number,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  const node = frame && frameNiboxes(frame)[niboxIndex];
+  if (!node?.args) return false;
+  node.args[2] = numberArg(w);
+  return true;
+}
+
+export function deleteNibox(ast: Ast.Root, frameIndex: number, niboxIndex: number): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  if (!frame) return false;
+  const node = frameNiboxes(frame)[niboxIndex];
+  if (!node) return false;
+  const at = frame.content.indexOf(node);
+  if (at < 0) return false;
+  let start = at;
+  let count = 1;
+  if (start > 0 && isSpacing(frame.content[start - 1])) {
+    start -= 1;
+    count += 1;
+  }
+  frame.content.splice(start, count);
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // The shared operation set. Every edit — from the UI, the CLI, or an AI agent —
 // is one of these ops applied to the AST. Keeping the type and the dispatcher
@@ -582,7 +701,11 @@ export type TexEditOp =
   | { kind: 'runBold'; frameIndex: number; runText: string }
   | { kind: 'insert'; frameIndex: number; snippet: string }
   | { kind: 'addFrame'; snippet: string; afterIndex: number }
-  | { kind: 'deleteComponent'; frameIndex: number; componentIndex: number };
+  | { kind: 'deleteComponent'; frameIndex: number; componentIndex: number }
+  | { kind: 'insertNibox'; frameIndex: number; x: number; y: number; w: number; content: string }
+  | { kind: 'moveNibox'; frameIndex: number; niboxIndex: number; x: number; y: number }
+  | { kind: 'resizeNibox'; frameIndex: number; niboxIndex: number; w: number }
+  | { kind: 'deleteNibox'; frameIndex: number; niboxIndex: number };
 
 /** Apply one edit op to the AST in place. Returns whether anything changed. */
 export function applyOp(ast: Ast.Root, op: TexEditOp): boolean {
@@ -613,6 +736,14 @@ export function applyOp(ast: Ast.Root, op: TexEditOp): boolean {
       return addFrame(ast, op.snippet, op.afterIndex);
     case 'deleteComponent':
       return deleteFrameComponent(ast, op.frameIndex, op.componentIndex);
+    case 'insertNibox':
+      return insertNibox(ast, op.frameIndex, op.x, op.y, op.w, op.content);
+    case 'moveNibox':
+      return moveNibox(ast, op.frameIndex, op.niboxIndex, op.x, op.y);
+    case 'resizeNibox':
+      return resizeNibox(ast, op.frameIndex, op.niboxIndex, op.w);
+    case 'deleteNibox':
+      return deleteNibox(ast, op.frameIndex, op.niboxIndex);
     default:
       return false;
   }

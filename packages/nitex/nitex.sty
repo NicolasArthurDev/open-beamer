@@ -1,0 +1,28 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{nitex}[2026/06/15 NiTeX -- a Cartesian plane for LaTeX]
+
+\RequirePackage{tikz}
+
+% ---------------------------------------------------------------------------
+% NiTeX coordinate plane
+%   x, y, w are numbers in 0..100 (decimals allowed, e.g. 10.5).
+%   Origin (0,0) is the BOTTOM-LEFT of the page; y grows UPWARD (Cartesian).
+%   (x, y) addresses the box's TOP-LEFT corner.
+%   w is the box width as a percentage of \paperwidth.
+%
+%   \nibox{x}{y}{w}{content}
+% ---------------------------------------------------------------------------
+% pgfmath (float) computes #/100*\paper... — dividing first avoids the TeX
+% "Dimension too large" overflow you get from \dimexpr (e.g. 92\paperheight).
+\newcommand\nibox[4]{%
+  \begin{tikzpicture}[remember picture, overlay]%
+    \pgfmathsetlengthmacro\nitex@x{#1/100*\paperwidth}%
+    \pgfmathsetlengthmacro\nitex@y{#2/100*\paperheight}%
+    \pgfmathsetlengthmacro\nitex@w{#3/100*\paperwidth}%
+    \node[anchor=north west, inner sep=0pt, outer sep=0pt, text width=\nitex@w]
+      at ([xshift=\nitex@x, yshift=\nitex@y]current page.south west)
+      {#4};%
+  \end{tikzpicture}%
+}
+
+\endinput

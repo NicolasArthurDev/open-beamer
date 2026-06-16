@@ -5,7 +5,7 @@ import {
   type RenderTask,
 } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -21,15 +21,19 @@ export function PdfCanvas({
   page,
   canvasClassName = 'rounded-sm bg-white shadow-[0_10px_50px_-12px_rgba(0,0,0,0.55)] ring-1 ring-black/10',
   onActivate,
+  overlay,
 }: {
   doc: PdfDoc;
   page: number;
   canvasClassName?: string;
   /** Called when the rendered slide is clicked (e.g. to start editing it). */
   onActivate?: () => void;
+  /** Rendered over the page, sized exactly to it — for positioned-box handles. */
+  overlay?: ReactNode;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -52,8 +56,11 @@ export function PdfCanvas({
       if (!ctx) return;
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
-      canvas.style.width = `${Math.floor(base.width * fit)}px`;
-      canvas.style.height = `${Math.floor(base.height * fit)}px`;
+      const cssW = Math.floor(base.width * fit);
+      const cssH = Math.floor(base.height * fit);
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      if (!cancelled) setSize({ w: cssW, h: cssH });
       task?.cancel();
       task = p.render({ canvasContext: ctx, viewport });
       try {
@@ -75,18 +82,21 @@ export function PdfCanvas({
 
   return (
     <div ref={wrapRef} className="grid h-full w-full place-items-center">
-      {onActivate ? (
-        <button
-          type="button"
-          onClick={onActivate}
-          className="cursor-pointer border-0 bg-transparent p-0 leading-none"
-          title="Editar este slide"
-        >
-          <canvas ref={canvasRef} className={canvasClassName} />
-        </button>
-      ) : (
+      <div
+        className="relative leading-none"
+        style={size ? { width: size.w, height: size.h } : undefined}
+      >
         <canvas ref={canvasRef} className={canvasClassName} />
-      )}
+        {onActivate && !overlay && (
+          <button
+            type="button"
+            onClick={onActivate}
+            title="Editar este slide"
+            className="absolute inset-0 cursor-pointer bg-transparent"
+          />
+        )}
+        {overlay}
+      </div>
     </div>
   );
 }

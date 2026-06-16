@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import type { ServerResponse } from 'node:http';
 import path from 'node:path';
+import { NITEX_STY_FILENAME, NITEX_STY_SOURCE } from '@nitex/nitex';
 import {
   applyOpToSource,
   frameBeginLines,
@@ -19,6 +20,12 @@ import { validateMutationRequest } from '../http/request-guard.ts';
 
 const CONFIG_FILE = 'nitex-studio.config.ts';
 const DECK_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/** A deck that uses \nibox needs the NiTeX package loaded in its preamble. */
+function ensureNitexUsepackage(src: string): string {
+  if (src.includes('\\usepackage{nitex}')) return src;
+  return src.replace(/\\begin\{document\}/, '\\usepackage{nitex}\n\\begin{document}');
+}
 
 /** Escape the LaTeX-special characters a free-text title might contain. */
 function escapeLatex(s: string): string {
@@ -328,8 +335,14 @@ export function nitexStudioPlugin(opts: NitexStudioPluginOptions): Plugin {
           return;
         }
         const src = await readFile(file, 'utf8');
-        const updated = applyOpToSource(src, body.op);
+        let updated = applyOpToSource(src, body.op);
         if (updated !== null) {
+          // A deck that now contains \nibox needs the NiTeX package + its .sty.
+          if (updated.includes('\\nibox')) {
+            updated = ensureNitexUsepackage(updated);
+            const sty = path.join(path.dirname(file), NITEX_STY_FILENAME);
+            if (!existsSync(sty)) await writeFile(sty, NITEX_STY_SOURCE, 'utf8');
+          }
           recordHistory(body.deckId as string, src); // snapshot for undo
           await writeFile(file, updated, 'utf8');
         }
