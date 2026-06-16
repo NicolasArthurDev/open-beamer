@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ComponentPalette } from '../components/component-palette';
 import { EditPanel } from '../components/edit-panel';
+import { Filmstrip } from '../components/filmstrip';
 import { Button } from '../components/ui/button';
 import { PdfCanvas } from '../lib/pdf';
 import { useDeck } from '../lib/use-deck';
@@ -81,6 +82,7 @@ export function Viewer() {
         <span className="flex-1" />
         {editing && (
           <>
+            <ComponentPalette deckId={id} activeFrame={activeFrame} />
             <Button
               variant="ghost"
               size="icon-sm"
@@ -116,7 +118,7 @@ export function Viewer() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <ComponentPalette deckId={id} open={editing} activeFrame={activeFrame} />
+        <Filmstrip doc={doc} page={page} count={pageCount} onSelect={goTo} />
         <main className="paper relative min-h-0 min-w-0 flex-1 bg-canvas">
           <div className="absolute inset-0 p-6">
             {error ? (

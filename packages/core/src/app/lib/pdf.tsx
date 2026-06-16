@@ -16,7 +16,15 @@ export async function loadPdf(data: ArrayBuffer): Promise<PdfDoc> {
 }
 
 /** Renders a single PDF page into a canvas, scaled to fit its container. */
-export function PdfCanvas({ doc, page }: { doc: PdfDoc; page: number }) {
+export function PdfCanvas({
+  doc,
+  page,
+  canvasClassName = 'rounded-sm bg-white shadow-[0_10px_50px_-12px_rgba(0,0,0,0.55)] ring-1 ring-black/10',
+}: {
+  doc: PdfDoc;
+  page: number;
+  canvasClassName?: string;
+}) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -64,10 +72,7 @@ export function PdfCanvas({ doc, page }: { doc: PdfDoc; page: number }) {
 
   return (
     <div ref={wrapRef} className="grid h-full w-full place-items-center">
-      <canvas
-        ref={canvasRef}
-        className="rounded-sm bg-white shadow-[0_10px_50px_-12px_rgba(0,0,0,0.55)] ring-1 ring-black/10"
-      />
+      <canvas ref={canvasRef} className={canvasClassName} />
     </div>
   );
 }

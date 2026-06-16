@@ -20,7 +20,6 @@ export function Home() {
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-hairline bg-sidebar/85 px-4 backdrop-blur-md">
         <Presentation className="size-4 text-brand" />
         <span className="font-heading text-[13px] font-semibold tracking-tight">open-beamer</span>
-        <span className="eyebrow ml-1">beamer, sem a dor</span>
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 overflow-y-auto px-6 py-10">
