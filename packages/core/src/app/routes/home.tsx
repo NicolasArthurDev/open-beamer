@@ -152,7 +152,7 @@ export function Home() {
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <header className="flex h-12 shrink-0 items-center gap-2 border-hairline border-b bg-sidebar/85 px-4 backdrop-blur-md">
         <Presentation className="size-4 text-brand" />
-        <span className="font-heading font-semibold text-[13px] tracking-tight">open-beamer</span>
+        <span className="font-heading font-semibold text-[13px] tracking-tight">NiTeX Studio</span>
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 overflow-y-auto px-6 py-10">

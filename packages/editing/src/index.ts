@@ -565,7 +565,7 @@ export function reorderFrame(ast: Ast.Root, from: number, to: number): boolean {
 // ---------------------------------------------------------------------------
 // The shared operation set. Every edit — from the UI, the CLI, or an AI agent —
 // is one of these ops applied to the AST. Keeping the type and the dispatcher
-// here makes `@open-beamer/editing` the single source of truth for "what can be
+// here makes `@nitex-studio/editing` the single source of truth for "what can be
 // done to a deck"; the dev server, CLI and (future) MCP server all call applyOp.
 // ---------------------------------------------------------------------------
 

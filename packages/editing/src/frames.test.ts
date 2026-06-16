@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { compile } from '@open-beamer/engine';
+import { compile } from '@nitex-studio/engine';
 import { describe, expect, it } from 'vitest';
 import {
   addFrame,

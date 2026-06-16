@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import type { InlineConfig } from 'vite';
-import type { OpenBeamerConfig } from '../config.ts';
-import { loadUserConfig, openBeamerPlugin } from './open-beamer-plugin.ts';
+import type { NitexStudioConfig } from '../config.ts';
+import { loadUserConfig, nitexStudioPlugin } from './plugin.ts';
 
 function findPackageRoot(fromFile: string): string {
   let dir = path.dirname(fromFile);
@@ -21,7 +21,7 @@ const APP_ROOT = path.join(PKG_ROOT, 'src', 'app');
 
 export type CreateViteConfigOptions = {
   userCwd: string;
-  config?: OpenBeamerConfig;
+  config?: NitexStudioConfig;
 };
 
 export async function createViteConfig(opts: CreateViteConfigOptions): Promise<InlineConfig> {
@@ -37,7 +37,7 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
     root: APP_ROOT,
     configFile: false,
     envDir: userCwd,
-    plugins: [react(), tailwindcss(), openBeamerPlugin({ userCwd, config })],
+    plugins: [react(), tailwindcss(), nitexStudioPlugin({ userCwd, config })],
     resolve: {
       alias: {
         '@': APP_ROOT,

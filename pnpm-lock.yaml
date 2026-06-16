@@ -26,7 +26,7 @@ importers:
 
   apps/demo:
     dependencies:
-      '@open-beamer/core':
+      '@nitex-studio/core':
         specifier: workspace:*
         version: link:../../packages/core
 
@@ -35,10 +35,10 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.8
         version: 5.2.9
-      '@open-beamer/editing':
+      '@nitex-studio/editing':
         specifier: workspace:*
         version: link:../editing
-      '@open-beamer/engine':
+      '@nitex-studio/engine':
         specifier: workspace:*
         version: link:../engine
       '@tailwindcss/vite':
@@ -136,7 +136,7 @@ importers:
         specifier: ^1.8.4
         version: 1.8.4
     devDependencies:
-      '@open-beamer/engine':
+      '@nitex-studio/engine':
         specifier: workspace:*
         version: link:../engine
       '@types/node':

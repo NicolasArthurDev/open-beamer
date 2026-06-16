@@ -43,11 +43,11 @@ export function useDeck(id: string) {
     const onCompiling = (data: { id?: string } | undefined) => {
       if (data?.id === id) setLoading(true);
     };
-    import.meta.hot.on('open-beamer:deck-changed', onChanged);
-    import.meta.hot.on('open-beamer:deck-compiling', onCompiling);
+    import.meta.hot.on('nitex-studio:deck-changed', onChanged);
+    import.meta.hot.on('nitex-studio:deck-compiling', onCompiling);
     return () => {
-      import.meta.hot?.off('open-beamer:deck-changed', onChanged);
-      import.meta.hot?.off('open-beamer:deck-compiling', onCompiling);
+      import.meta.hot?.off('nitex-studio:deck-changed', onChanged);
+      import.meta.hot?.off('nitex-studio:deck-compiling', onCompiling);
     };
   }, [id, refresh]);
 

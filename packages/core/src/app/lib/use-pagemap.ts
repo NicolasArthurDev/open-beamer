@@ -23,9 +23,9 @@ export function usePageMap(id: string) {
     const handler = (data: { id?: string } | undefined) => {
       if (data?.id === id) void refresh();
     };
-    import.meta.hot.on('open-beamer:deck-changed', handler);
+    import.meta.hot.on('nitex-studio:deck-changed', handler);
     return () => {
-      import.meta.hot?.off('open-beamer:deck-changed', handler);
+      import.meta.hot?.off('nitex-studio:deck-changed', handler);
     };
   }, [id, refresh]);
 
