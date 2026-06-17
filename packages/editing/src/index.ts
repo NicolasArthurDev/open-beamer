@@ -1,4 +1,4 @@
-import { clampCoord, NIBOX_MACRO, roundCoord } from '@nitex/nitex';
+import { clampCoord, NI_COMPONENTS, roundCoord } from '@nitex/nitex';
 import type * as Ast from '@unified-latex/unified-latex-types';
 import { getParser } from '@unified-latex/unified-latex-util-parse';
 import { toString as latexToString } from '@unified-latex/unified-latex-util-to-string';
@@ -6,13 +6,19 @@ import { visit } from '@unified-latex/unified-latex-util-visit';
 
 // unified-latex only attaches arguments to macros it knows the signature of. Beamer's
 // content macros aren't in the default table, so we register the ones we edit. `m` = one
-// mandatory argument; NiTeX's \nibox takes four (x, y, w, content).
+// mandatory argument. Each NiTeX component takes {x}{y}{w} plus one arg per field.
+const niMacros = Object.fromEntries(
+  NI_COMPONENTS.map((c) => [
+    c.macro,
+    { signature: ['m', 'm', 'm', ...c.fields.map(() => 'm')].join(' ') },
+  ]),
+);
 const parser = getParser({
   macros: {
     frametitle: { signature: 'm' },
     title: { signature: 'm' },
     frame: { signature: 'm' },
-    [NIBOX_MACRO]: { signature: 'm m m m' },
+    ...niMacros,
   },
 });
 
@@ -44,7 +50,7 @@ export type FrameInfo = {
   title: string;
   texts: string[];
   components: ComponentInfo[];
-  niboxes: NiboxInfo[];
+  niComponents: NiComponent[];
 };
 
 /** Friendly labels for the environments the palette inserts (fallback: the env name). */
@@ -224,7 +230,7 @@ export function listFrames(ast: Ast.Root): FrameInfo[] {
     title: titleTarget(node)?.get() ?? '',
     texts: frameTextRuns(node).map((r) => r.text),
     components: componentInfos(node),
-    niboxes: niboxInfos(node),
+    niComponents: niComponentInfos(node),
   }));
 }
 
@@ -566,20 +572,30 @@ export function reorderFrame(ast: Ast.Root, from: number, to: number): boolean {
   return true;
 }
 
-// --- NiTeX positioned boxes (\nibox{x}{y}{w}{content}) -------------------
+// --- NiTeX positioned components (the \ni* family) -----------------------
 // Coordinates are 0..100, origin bottom-left, y up; (x,y) = the box's top-left
-// corner; w = width as % of the page. See @nitex/nitex.
+// corner; w = width as % of the page. Each type's macro + fields come from the
+// NI_COMPONENTS registry in @nitex/nitex.
 
-export type NiboxInfo = { index: number; x: number; y: number; w: number; text: string };
+export type NiComponent = {
+  index: number;
+  type: string;
+  x: number;
+  y: number;
+  w: number;
+  /** Content of each field, in registry order (e.g. block = [title, body]). */
+  fields: string[];
+};
 
-function frameNiboxes(frame: Ast.Environment): Ast.Macro[] {
-  const out: Ast.Macro[] = [];
-  visit(frame, (node) => {
-    if (node.type === 'macro' && node.content === NIBOX_MACRO && (node.args?.length ?? 0) >= 4) {
-      out.push(node);
-    }
-  });
-  return out;
+const NI_SPEC_BY_MACRO = new Map(NI_COMPONENTS.map((c) => [c.macro, c]));
+const NI_SPEC_BY_TYPE = new Map(NI_COMPONENTS.map((c) => [c.type, c]));
+
+/** Top-level ni-family macros in a frame, in document order. */
+function frameNiMacros(frame: Ast.Environment): Ast.Macro[] {
+  return frame.content.filter(
+    (n): n is Ast.Macro =>
+      n.type === 'macro' && NI_SPEC_BY_MACRO.has(n.content) && (n.args?.length ?? 0) >= 3,
+  );
 }
 
 const argToNumber = (arg: Ast.Argument): number => Number(latexToString(arg.content).trim());
@@ -593,81 +609,105 @@ function numberArg(value: number): Ast.Argument {
   };
 }
 
-function niboxInfos(frame: Ast.Environment): NiboxInfo[] {
-  return frameNiboxes(frame).map((n, index) => {
+/** An argument whose content is parsed LaTeX (so `\item`, math, etc. round-trip). */
+function parsedArg(value: string): Ast.Argument {
+  return { type: 'argument', openMark: '{', closeMark: '}', content: parseTex(value).content };
+}
+
+function niComponentInfos(frame: Ast.Environment): NiComponent[] {
+  return frameNiMacros(frame).map((n, index) => {
     const a = n.args as Ast.Argument[];
     return {
       index,
+      type: NI_SPEC_BY_MACRO.get(n.content)?.type ?? n.content,
       x: argToNumber(a[0]),
       y: argToNumber(a[1]),
       w: argToNumber(a[2]),
-      text: latexToString(a[3].content).trim(),
+      fields: a.slice(3).map((arg) => latexToString(arg.content).trim()),
     };
   });
 }
 
-export function listNiboxes(ast: Ast.Root, frameIndex: number): NiboxInfo[] {
+export function listNiComponents(ast: Ast.Root, frameIndex: number): NiComponent[] {
   const frame = collectFrames(ast)[frameIndex]?.node;
-  return frame ? niboxInfos(frame) : [];
+  return frame ? niComponentInfos(frame) : [];
 }
 
-/** Append a `\nibox{x}{y}{w}{content}` to a frame's body. */
-export function insertNibox(
+/** Append a ni component of `type` at (x,y) width w, using the registry field defaults. */
+export function insertNiComponent(
   ast: Ast.Root,
   frameIndex: number,
+  type: string,
   x: number,
   y: number,
   w: number,
-  content: string,
 ): boolean {
   const frame = collectFrames(ast)[frameIndex]?.node;
-  if (!frame) return false;
+  const spec = NI_SPEC_BY_TYPE.get(type);
+  if (!frame || !spec) return false;
   const macro: Ast.Macro = {
     type: 'macro',
-    content: NIBOX_MACRO,
+    content: spec.macro,
     args: [
       numberArg(x),
       numberArg(y),
       numberArg(w),
-      { type: 'argument', openMark: '{', closeMark: '}', content: parseTex(content).content },
+      ...spec.fields.map((f) => parsedArg(f.default)),
     ],
   };
   frame.content.push({ type: 'parbreak' }, macro);
   return true;
 }
 
-export function moveNibox(
+export function moveNiComponent(
   ast: Ast.Root,
   frameIndex: number,
-  niboxIndex: number,
+  index: number,
   x: number,
   y: number,
 ): boolean {
   const frame = collectFrames(ast)[frameIndex]?.node;
-  const node = frame && frameNiboxes(frame)[niboxIndex];
+  const node = frame && frameNiMacros(frame)[index];
   if (!node?.args) return false;
   node.args[0] = numberArg(x);
   node.args[1] = numberArg(y);
   return true;
 }
 
-export function resizeNibox(
+export function resizeNiComponent(
   ast: Ast.Root,
   frameIndex: number,
-  niboxIndex: number,
+  index: number,
   w: number,
 ): boolean {
   const frame = collectFrames(ast)[frameIndex]?.node;
-  const node = frame && frameNiboxes(frame)[niboxIndex];
+  const node = frame && frameNiMacros(frame)[index];
   if (!node?.args) return false;
   node.args[2] = numberArg(w);
   return true;
 }
 
-export function deleteNibox(ast: Ast.Root, frameIndex: number, niboxIndex: number): boolean {
+/** Replace the value of a ni component's field (fieldIndex into its registry fields). */
+export function setNiField(
+  ast: Ast.Root,
+  frameIndex: number,
+  index: number,
+  fieldIndex: number,
+  value: string,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  const node = frame && frameNiMacros(frame)[index];
+  if (!node?.args) return false;
+  const argIdx = 3 + fieldIndex;
+  if (argIdx < 3 || argIdx >= node.args.length) return false;
+  node.args[argIdx] = parsedArg(value);
+  return true;
+}
+
+export function deleteNiComponent(ast: Ast.Root, frameIndex: number, index: number): boolean {
   const frame = collectFrames(ast)[frameIndex]?.node;
   if (!frame) return false;
-  const node = frameNiboxes(frame)[niboxIndex];
+  const node = frameNiMacros(frame)[index];
   if (!node) return false;
   const at = frame.content.indexOf(node);
   if (at < 0) return false;
@@ -702,10 +742,11 @@ export type TexEditOp =
   | { kind: 'insert'; frameIndex: number; snippet: string }
   | { kind: 'addFrame'; snippet: string; afterIndex: number }
   | { kind: 'deleteComponent'; frameIndex: number; componentIndex: number }
-  | { kind: 'insertNibox'; frameIndex: number; x: number; y: number; w: number; content: string }
-  | { kind: 'moveNibox'; frameIndex: number; niboxIndex: number; x: number; y: number }
-  | { kind: 'resizeNibox'; frameIndex: number; niboxIndex: number; w: number }
-  | { kind: 'deleteNibox'; frameIndex: number; niboxIndex: number };
+  | { kind: 'insertNiComponent'; frameIndex: number; type: string; x: number; y: number; w: number }
+  | { kind: 'moveNiComponent'; frameIndex: number; index: number; x: number; y: number }
+  | { kind: 'resizeNiComponent'; frameIndex: number; index: number; w: number }
+  | { kind: 'setNiField'; frameIndex: number; index: number; fieldIndex: number; value: string }
+  | { kind: 'deleteNiComponent'; frameIndex: number; index: number };
 
 /** Apply one edit op to the AST in place. Returns whether anything changed. */
 export function applyOp(ast: Ast.Root, op: TexEditOp): boolean {
@@ -736,14 +777,16 @@ export function applyOp(ast: Ast.Root, op: TexEditOp): boolean {
       return addFrame(ast, op.snippet, op.afterIndex);
     case 'deleteComponent':
       return deleteFrameComponent(ast, op.frameIndex, op.componentIndex);
-    case 'insertNibox':
-      return insertNibox(ast, op.frameIndex, op.x, op.y, op.w, op.content);
-    case 'moveNibox':
-      return moveNibox(ast, op.frameIndex, op.niboxIndex, op.x, op.y);
-    case 'resizeNibox':
-      return resizeNibox(ast, op.frameIndex, op.niboxIndex, op.w);
-    case 'deleteNibox':
-      return deleteNibox(ast, op.frameIndex, op.niboxIndex);
+    case 'insertNiComponent':
+      return insertNiComponent(ast, op.frameIndex, op.type, op.x, op.y, op.w);
+    case 'moveNiComponent':
+      return moveNiComponent(ast, op.frameIndex, op.index, op.x, op.y);
+    case 'resizeNiComponent':
+      return resizeNiComponent(ast, op.frameIndex, op.index, op.w);
+    case 'setNiField':
+      return setNiField(ast, op.frameIndex, op.index, op.fieldIndex, op.value);
+    case 'deleteNiComponent':
+      return deleteNiComponent(ast, op.frameIndex, op.index);
     default:
       return false;
   }

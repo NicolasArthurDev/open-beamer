@@ -10,23 +10,24 @@ import {
   applyOpToSource,
   deleteFrame,
   deleteFrameComponent,
-  deleteNibox,
+  deleteNiComponent,
   duplicateFrame,
   editFrameText,
   editFrameTitle,
   frameAtLine,
   frameBeginLines,
   insertIntoFrame,
-  insertNibox,
+  insertNiComponent,
   listFrames,
-  listNiboxes,
-  moveNibox,
+  listNiComponents,
+  moveNiComponent,
   parseTex,
   printTex,
   reorderFrame,
-  resizeNibox,
+  resizeNiComponent,
   setFrameColor,
   setFrameFontSize,
+  setNiField,
   setRunColor,
   setRunFontSize,
   toggleRunBold,
@@ -243,39 +244,55 @@ describe('inserting components', () => {
   });
 });
 
-describe('NiTeX niboxes', () => {
-  it('inserts, lists, moves, resizes, clamps and deletes a nibox', () => {
+describe('NiTeX components', () => {
+  it('inserts, lists, moves, resizes, clamps, edits text and deletes a box', () => {
     const ast = parseTex(SAMPLE);
-    expect(insertNibox(ast, 0, 10.5, 80, 40, 'Caixa')).toBe(true);
-    expect(listNiboxes(ast, 0)).toHaveLength(1);
-    expect(listNiboxes(ast, 0)[0]).toMatchObject({
+    expect(insertNiComponent(ast, 0, 'box', 10.5, 80, 40)).toBe(true);
+    expect(listNiComponents(ast, 0)).toHaveLength(1);
+    expect(listNiComponents(ast, 0)[0]).toMatchObject({
       index: 0,
+      type: 'box',
       x: 10.5,
       y: 80,
       w: 40,
-      text: 'Caixa',
     });
+    expect(listNiComponents(ast, 0)[0].fields[0]).toBe('Texto'); // registry default
+
+    // edit the text content (the bug fix)
+    expect(setNiField(ast, 0, 0, 0, 'Olá mundo')).toBe(true);
+    expect(listNiComponents(ast, 0)[0].fields[0]).toBe('Olá mundo');
     expect(printTex(ast)).toContain('\\nibox');
 
-    expect(moveNibox(ast, 0, 0, 25, 60)).toBe(true);
-    expect(listNiboxes(ast, 0)[0]).toMatchObject({ x: 25, y: 60 });
-
-    expect(resizeNibox(ast, 0, 0, 55)).toBe(true);
-    expect(listNiboxes(ast, 0)[0].w).toBe(55);
+    expect(moveNiComponent(ast, 0, 0, 25, 60)).toBe(true);
+    expect(listNiComponents(ast, 0)[0]).toMatchObject({ x: 25, y: 60 });
+    expect(resizeNiComponent(ast, 0, 0, 55)).toBe(true);
+    expect(listNiComponents(ast, 0)[0].w).toBe(55);
 
     // out-of-range coordinates clamp into the 0..100 plane
-    moveNibox(ast, 0, 0, -5, 150);
-    expect(listNiboxes(ast, 0)[0]).toMatchObject({ x: 0, y: 100 });
+    moveNiComponent(ast, 0, 0, -5, 150);
+    expect(listNiComponents(ast, 0)[0]).toMatchObject({ x: 0, y: 100 });
 
-    expect(deleteNibox(ast, 0, 0)).toBe(true);
-    expect(listNiboxes(ast, 0)).toHaveLength(0);
+    expect(deleteNiComponent(ast, 0, 0)).toBe(true);
+    expect(listNiComponents(ast, 0)).toHaveLength(0);
   });
 
-  it('surfaces niboxes in listFrames', () => {
+  it('handles a multi-field component (block = title + body)', () => {
     const ast = parseTex(SAMPLE);
-    insertNibox(ast, 1, 5, 5, 30, 'Rodapé');
-    expect(listFrames(ast)[1].niboxes.map((b) => b.text)).toEqual(['Rodapé']);
-    expect(listFrames(ast)[0].niboxes).toEqual([]);
+    expect(insertNiComponent(ast, 0, 'block', 10, 80, 45)).toBe(true);
+    const c = listNiComponents(ast, 0)[0];
+    expect(c.type).toBe('block');
+    expect(c.fields).toHaveLength(2);
+    setNiField(ast, 0, 0, 0, 'Resultados');
+    setNiField(ast, 0, 0, 1, 'Crescemos 30%');
+    expect(listNiComponents(ast, 0)[0].fields).toEqual(['Resultados', 'Crescemos 30%']);
+    expect(printTex(ast)).toContain('\\niblock');
+  });
+
+  it('surfaces ni components in listFrames', () => {
+    const ast = parseTex(SAMPLE);
+    insertNiComponent(ast, 1, 'box', 5, 5, 30);
+    expect(listFrames(ast)[1].niComponents.map((c) => c.type)).toEqual(['box']);
+    expect(listFrames(ast)[0].niComponents).toEqual([]);
   });
 });
 

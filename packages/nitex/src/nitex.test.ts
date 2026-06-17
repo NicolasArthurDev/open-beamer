@@ -5,7 +5,15 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile } from '@nitex-studio/engine';
 import { describe, expect, it } from 'vitest';
-import { clampCoord, NITEX_STY_FILENAME, NITEX_STY_SOURCE, roundCoord } from './index';
+import {
+  clampCoord,
+  NI_COMPONENTS,
+  NI_MACRO_NAMES,
+  NITEX_STY_FILENAME,
+  NITEX_STY_SOURCE,
+  roundCoord,
+  usesNitex,
+} from './index';
 
 describe('nitex package', () => {
   it('NITEX_STY_SOURCE stays byte-identical to nitex.sty (no drift)', () => {
@@ -24,6 +32,13 @@ describe('nitex package', () => {
     expect(roundCoord(10.21049)).toBe(10.21);
     expect(roundCoord(20.5905)).toBe(20.591);
   });
+
+  it('registry: macros are unique and usesNitex detects them', () => {
+    expect(new Set(NI_MACRO_NAMES).size).toBe(NI_COMPONENTS.length);
+    expect(usesNitex('\\nibullets{1}{2}{3}{x}')).toBe(true);
+    expect(usesNitex('\\niblock{1}{2}{3}{a}{b}')).toBe(true);
+    expect(usesNitex('a plain deck with no boxes')).toBe(false);
+  });
 });
 
 function hasLualatex(): boolean {
@@ -36,11 +51,16 @@ function hasLualatex(): boolean {
 }
 
 describe('nitex compiles', () => {
-  it.runIf(hasLualatex())('a deck using \\nibox compiles to a PDF', async () => {
+  it.runIf(hasLualatex())('every ni component in the registry compiles', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'nitex-'));
     const out = mkdtempSync(join(tmpdir(), 'nitex-out-'));
     try {
       writeFileSync(join(dir, NITEX_STY_FILENAME), NITEX_STY_SOURCE, 'utf8');
+      // One of each registered component, driven by the registry + its field defaults.
+      const body = NI_COMPONENTS.map((c, i) => {
+        const args = c.fields.map((f) => `{${f.default}}`).join('');
+        return `\\${c.macro}{6}{${90 - i * 11}}{40}${args}`;
+      }).join('\n');
       writeFileSync(
         join(dir, 'main.tex'),
         [
@@ -48,8 +68,7 @@ describe('nitex compiles', () => {
           '\\usepackage{nitex}',
           '\\begin{document}',
           '\\begin{frame}[plain]',
-          '\\nibox{10.5}{80}{40}{Hello NiTeX}',
-          '\\nibox{55}{20.5}{40}{Outra caixa}',
+          body,
           '\\end{frame}',
           '\\end{document}',
           '',

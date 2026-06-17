@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import type { ServerResponse } from 'node:http';
 import path from 'node:path';
-import { NITEX_STY_FILENAME, NITEX_STY_SOURCE } from '@nitex/nitex';
+import { NITEX_STY_FILENAME, NITEX_STY_SOURCE, usesNitex } from '@nitex/nitex';
 import {
   applyOpToSource,
   frameBeginLines,
@@ -337,8 +337,8 @@ export function nitexStudioPlugin(opts: NitexStudioPluginOptions): Plugin {
         const src = await readFile(file, 'utf8');
         let updated = applyOpToSource(src, body.op);
         if (updated !== null) {
-          // A deck that now contains \nibox needs the NiTeX package + its .sty.
-          if (updated.includes('\\nibox')) {
+          // A deck that now uses any NiTeX component needs the package + its .sty.
+          if (usesNitex(updated)) {
             updated = ensureNitexUsepackage(updated);
             const sty = path.join(path.dirname(file), NITEX_STY_FILENAME);
             if (!existsSync(sty)) await writeFile(sty, NITEX_STY_SOURCE, 'utf8');

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { NiboxInfo } from '../lib/use-outline';
+import type { NiComponent } from '../lib/use-outline';
 
 const clamp = (v: number) => Math.max(0, Math.min(100, v));
 
@@ -7,37 +7,29 @@ type Move = (index: number, x: number, y: number) => void;
 type Resize = (index: number, w: number) => void;
 
 /**
- * Draggable handles over the preview, one per NiTeX box. Positions map directly
- * from the 0..100 plane (origin bottom-left, y up): left=x%, top=(100-y)%,
+ * Draggable handles over the preview, one per NiTeX component. Positions map
+ * directly from the 0..100 plane (origin bottom-left, y up): left=x%, top=(100-y)%,
  * width=w%. Dragging updates locally for smoothness and commits one op on release.
  */
 export function NiboxOverlay({
-  niboxes,
+  niComponents,
   onMove,
   onResize,
 }: {
-  niboxes: NiboxInfo[];
+  niComponents: NiComponent[];
   onMove: Move;
   onResize: Resize;
 }) {
   return (
     <div className="pointer-events-none absolute inset-0">
-      {niboxes.map((b) => (
-        <NiboxHandle key={b.index} box={b} onMove={onMove} onResize={onResize} />
+      {niComponents.map((c) => (
+        <NiHandle key={c.index} box={c} onMove={onMove} onResize={onResize} />
       ))}
     </div>
   );
 }
 
-function NiboxHandle({
-  box,
-  onMove,
-  onResize,
-}: {
-  box: NiboxInfo;
-  onMove: Move;
-  onResize: Resize;
-}) {
+function NiHandle({ box, onMove, onResize }: { box: NiComponent; onMove: Move; onResize: Resize }) {
   const [local, setLocal] = useState({ x: box.x, y: box.y, w: box.w });
   const ref = useRef<HTMLDivElement>(null);
 
@@ -75,13 +67,13 @@ function NiboxHandle({
   return (
     <div
       ref={ref}
-      data-nibox={box.index}
+      data-ni={box.index}
       onPointerDown={(e) => drag(e, 'move')}
       style={{ left: `${local.x}%`, top: `${100 - local.y}%`, width: `${local.w}%` }}
       className="pointer-events-auto absolute flex min-h-5 cursor-move items-start rounded-[3px] border-2 border-brand/70 border-dashed bg-brand/5 px-1 py-0.5 hover:bg-brand/10"
     >
       <span className="pointer-events-none truncate text-[10px] text-brand/90 leading-snug">
-        {box.text || 'caixa'}
+        {box.fields[0] || box.type}
       </span>
       <button
         type="button"
