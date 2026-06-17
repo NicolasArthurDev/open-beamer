@@ -3,28 +3,27 @@ import { cn } from '@/lib/utils';
 import type { NiComponent } from '../lib/use-outline';
 
 const clamp = (v: number) => Math.max(0, Math.min(100, v));
+const clampW = (v: number) => Math.max(5, Math.min(100, v));
 
-type Move = (index: number, x: number, y: number) => void;
-type Resize = (index: number, w: number) => void;
+type Change = (index: number, x: number, y: number, w: number) => void;
+type Mode = 'move' | 'resize-e' | 'resize-w';
 
 /**
  * Draggable handles over the preview, one per NiTeX component. Positions map
  * directly from the 0..100 plane (origin bottom-left, y up): left=x%, top=(100-y)%,
- * width=w%. Click a handle to select it (drag in the same gesture); click empty
- * space to deselect. Dragging updates locally and commits one op on release.
+ * width=w%. Click to select; drag the body to move, the side handles to change
+ * width (so the text rewraps). One op committed on release.
  */
 export function NiboxOverlay({
   niComponents,
   selected,
   onSelect,
-  onMove,
-  onResize,
+  onChange,
 }: {
   niComponents: NiComponent[];
   selected: number | null;
   onSelect: (index: number | null) => void;
-  onMove: Move;
-  onResize: Resize;
+  onChange: Change;
 }) {
   return (
     <div className="absolute inset-0" onPointerDown={() => onSelect(null)}>
@@ -34,8 +33,7 @@ export function NiboxOverlay({
           box={c}
           selected={selected === c.index}
           onSelect={() => onSelect(c.index)}
-          onMove={onMove}
-          onResize={onResize}
+          onChange={onChange}
         />
       ))}
     </div>
@@ -46,14 +44,12 @@ function NiHandle({
   box,
   selected,
   onSelect,
-  onMove,
-  onResize,
+  onChange,
 }: {
   box: NiComponent;
   selected: boolean;
   onSelect: () => void;
-  onMove: Move;
-  onResize: Resize;
+  onChange: Change;
 }) {
   const [local, setLocal] = useState({ x: box.x, y: box.y, w: box.w });
   const ref = useRef<HTMLDivElement>(null);
@@ -61,7 +57,7 @@ function NiHandle({
   // Re-sync when the deck recompiles with new coordinates.
   useEffect(() => setLocal({ x: box.x, y: box.y, w: box.w }), [box.x, box.y, box.w]);
 
-  const drag = (e: React.PointerEvent, mode: 'move' | 'resize') => {
+  const drag = (e: React.PointerEvent, mode: Mode) => {
     e.preventDefault();
     e.stopPropagation();
     onSelect();
@@ -74,22 +70,23 @@ function NiHandle({
     const onPointerMove = (ev: PointerEvent) => {
       const dx = ((ev.clientX - sx) / parent.width) * 100;
       const dy = ((ev.clientY - sy) / parent.height) * 100;
-      last =
-        mode === 'move'
-          ? { ...orig, x: clamp(orig.x + dx), y: clamp(orig.y - dy) }
-          : { ...orig, w: Math.max(5, Math.min(100, orig.w + dx)) };
+      if (mode === 'move') last = { x: clamp(orig.x + dx), y: clamp(orig.y - dy), w: orig.w };
+      else if (mode === 'resize-e') last = { ...orig, w: clampW(orig.w + dx) };
+      else last = { ...orig, x: clamp(orig.x + dx), w: clampW(orig.w - dx) }; // resize-w
       setLocal(last);
     };
     const onPointerUp = () => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
-      if (mode === 'move' && (last.x !== orig.x || last.y !== orig.y))
-        onMove(box.index, last.x, last.y);
-      else if (mode === 'resize' && last.w !== orig.w) onResize(box.index, last.w);
+      if (last.x !== orig.x || last.y !== orig.y || last.w !== orig.w)
+        onChange(box.index, last.x, last.y, last.w);
     };
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
   };
+
+  const edge =
+    'absolute top-1/2 z-10 h-6 w-1.5 -translate-y-1/2 cursor-ew-resize rounded-full border border-white bg-brand';
 
   return (
     <div
@@ -108,12 +105,20 @@ function NiHandle({
         {box.fields[0] || box.type}
       </span>
       {selected && (
-        <button
-          type="button"
-          title="Redimensionar"
-          onPointerDown={(e) => drag(e, 'resize')}
-          className="-right-1.5 -bottom-1.5 absolute size-3 cursor-nwse-resize rounded-[2px] border border-white bg-brand"
-        />
+        <>
+          <button
+            type="button"
+            title="Largura"
+            onPointerDown={(e) => drag(e, 'resize-w')}
+            className={cn(edge, '-left-1')}
+          />
+          <button
+            type="button"
+            title="Largura"
+            onPointerDown={(e) => drag(e, 'resize-e')}
+            className={cn(edge, '-right-1')}
+          />
+        </>
       )}
     </div>
   );

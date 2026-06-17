@@ -1,49 +1,14 @@
 import { NI_COMPONENTS } from '@nitex/nitex';
-import {
-  Bold,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  Minus,
-  Plus,
-  SlidersHorizontal,
-  Trash2,
-} from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { useEdit } from '../lib/use-edit';
 import { useOutline } from '../lib/use-outline';
-import { Field, NumberField, Section } from './panel/panel-fields';
+import { NumberField, Section } from './panel/panel-fields';
 import { PanelShell, usePanelMount } from './panel/panel-shell';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
-const SIZES = [
-  'tiny',
-  'scriptsize',
-  'footnotesize',
-  'small',
-  'normalsize',
-  'large',
-  'Large',
-  'LARGE',
-  'huge',
-  'Huge',
-] as const;
-const COLORS = ['black', 'red', 'blue', 'teal', 'orange', 'gray'];
-
 /** Field labels per ni component type, for the inspector. */
 const NI_SPEC = new Map(NI_COMPONENTS.map((c) => [c.type, c]));
-
-function Swatch({ color, onClick }: { color: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      title={color}
-      onClick={onClick}
-      className="size-4 rounded-full ring-1 ring-black/25 transition-transform hover:scale-110"
-      style={{ background: color }}
-    />
-  );
-}
 
 /**
  * Selection-driven inspector. With a component selected it shows only that
@@ -92,22 +57,6 @@ export function EditPanel({
   }
 
   if (comp) {
-    const style = comp.styles[0] ?? {};
-    const sizeIdx = style.size ? (SIZES as readonly string[]).indexOf(style.size) : 4;
-    const setStyle = (s: 'size' | 'color' | 'bold', value: string | null) =>
-      edit({
-        kind: 'setNiFieldStyle',
-        frameIndex: frame.index,
-        index: comp.index,
-        fieldIndex: 0,
-        style: s,
-        value,
-      });
-    const stepSize = (d: number) => {
-      const next = Math.max(0, Math.min(SIZES.length - 1, (sizeIdx < 0 ? 4 : sizeIdx) + d));
-      setStyle('size', SIZES[next]);
-    };
-
     return (
       <PanelShell uiAttr="inspector" animVisible={animVisible} header={header}>
         <Section title="Conteúdo">
@@ -130,31 +79,6 @@ export function EditPanel({
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
             />
           ))}
-        </Section>
-
-        <Section title="Formato">
-          <div className="flex flex-wrap items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              title="negrito"
-              data-state={style.bold ? 'on' : undefined}
-              onClick={() => setStyle('bold', style.bold ? null : 'on')}
-            >
-              <Bold className="size-3" />
-            </Button>
-            <Button variant="outline" size="icon-sm" title="menor" onClick={() => stepSize(-1)}>
-              <Minus className="size-3" />
-            </Button>
-            <Button variant="outline" size="icon-sm" title="maior" onClick={() => stepSize(1)}>
-              <Plus className="size-3" />
-            </Button>
-          </div>
-          <Field label="Cor">
-            {COLORS.map((c) => (
-              <Swatch key={c} color={c} onClick={() => setStyle('color', c)} />
-            ))}
-          </Field>
         </Section>
 
         <Section title="Posição">

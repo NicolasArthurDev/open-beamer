@@ -297,16 +297,18 @@ describe('NiTeX components', () => {
     expect(listFrames(ast)[0].niComponents).toEqual([]);
   });
 
-  it('styles a component (color/size/bold), idempotent, with clean field text', () => {
+  it('styles a component (color/size/bold/align), idempotent, with clean field text', () => {
     const ast = parseTex(SAMPLE);
     insertNiComponent(ast, 0, 'box', 10, 80, 40);
     setNiFieldStyle(ast, 0, 0, 0, 'color', 'red');
     setNiFieldStyle(ast, 0, 0, 0, 'size', 'large');
     setNiFieldStyle(ast, 0, 0, 0, 'bold', 'on');
+    setNiFieldStyle(ast, 0, 0, 0, 'align', 'center');
     const c = listNiComponents(ast, 0)[0];
     expect(c.fields[0]).toBe('Texto'); // text stays clean (no leaked switches)
-    expect(c.styles[0]).toMatchObject({ color: 'red', size: 'large', bold: true });
+    expect(c.styles[0]).toMatchObject({ color: 'red', size: 'large', bold: true, align: 'center' });
     expect(printTex(ast)).toContain('\\color{red}');
+    expect(printTex(ast)).toContain('\\centering');
 
     // re-apply color: replaced, not duplicated
     setNiFieldStyle(ast, 0, 0, 0, 'color', 'blue');
