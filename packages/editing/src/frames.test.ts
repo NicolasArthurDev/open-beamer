@@ -12,6 +12,7 @@ import {
   deleteFrameComponent,
   deleteNiComponent,
   duplicateFrame,
+  duplicateNiComponent,
   editFrameText,
   editFrameTitle,
   frameAtLine,
@@ -28,6 +29,7 @@ import {
   setFrameColor,
   setFrameFontSize,
   setNiField,
+  setNiFieldStyle,
   setRunColor,
   setRunFontSize,
   toggleRunBold,
@@ -293,6 +295,42 @@ describe('NiTeX components', () => {
     insertNiComponent(ast, 1, 'box', 5, 5, 30);
     expect(listFrames(ast)[1].niComponents.map((c) => c.type)).toEqual(['box']);
     expect(listFrames(ast)[0].niComponents).toEqual([]);
+  });
+
+  it('styles a component (color/size/bold), idempotent, with clean field text', () => {
+    const ast = parseTex(SAMPLE);
+    insertNiComponent(ast, 0, 'box', 10, 80, 40);
+    setNiFieldStyle(ast, 0, 0, 0, 'color', 'red');
+    setNiFieldStyle(ast, 0, 0, 0, 'size', 'large');
+    setNiFieldStyle(ast, 0, 0, 0, 'bold', 'on');
+    const c = listNiComponents(ast, 0)[0];
+    expect(c.fields[0]).toBe('Texto'); // text stays clean (no leaked switches)
+    expect(c.styles[0]).toMatchObject({ color: 'red', size: 'large', bold: true });
+    expect(printTex(ast)).toContain('\\color{red}');
+
+    // re-apply color: replaced, not duplicated
+    setNiFieldStyle(ast, 0, 0, 0, 'color', 'blue');
+    expect(count(printTex(ast), '\\color')).toBe(1);
+    expect(listNiComponents(ast, 0)[0].styles[0].color).toBe('blue');
+  });
+
+  it('editing the text preserves the style', () => {
+    const ast = parseTex(SAMPLE);
+    insertNiComponent(ast, 0, 'box', 10, 80, 40);
+    setNiFieldStyle(ast, 0, 0, 0, 'color', 'red');
+    setNiField(ast, 0, 0, 0, 'Novo texto');
+    const c = listNiComponents(ast, 0)[0];
+    expect(c.fields[0]).toBe('Novo texto');
+    expect(c.styles[0].color).toBe('red'); // style survived the text edit
+  });
+
+  it('duplicates a component offset down-right', () => {
+    const ast = parseTex(SAMPLE);
+    insertNiComponent(ast, 0, 'box', 10, 80, 40);
+    expect(duplicateNiComponent(ast, 0, 0)).toBe(true);
+    const list = listNiComponents(ast, 0);
+    expect(list).toHaveLength(2);
+    expect(list[1]).toMatchObject({ x: 13, y: 77, w: 40 });
   });
 });
 

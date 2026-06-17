@@ -577,18 +577,43 @@ export function reorderFrame(ast: Ast.Root, from: number, to: number): boolean {
 // corner; w = width as % of the page. Each type's macro + fields come from the
 // NI_COMPONENTS registry in @nitex/nitex.
 
+export type ComponentStyle = { color?: string; size?: string; bold?: boolean };
+
 export type NiComponent = {
   index: number;
   type: string;
   x: number;
   y: number;
   w: number;
-  /** Content of each field, in registry order (e.g. block = [title, body]). */
+  /** Content of each field, in registry order (e.g. block = [title, body]). Clean text (no style switches). */
   fields: string[];
+  /** Leading formatting switches read from each field. */
+  styles: ComponentStyle[];
 };
 
 const NI_SPEC_BY_MACRO = new Map(NI_COMPONENTS.map((c) => [c.macro, c]));
 const NI_SPEC_BY_TYPE = new Map(NI_COMPONENTS.map((c) => [c.type, c]));
+
+/** Split a field's leading formatting switches (+ spacing) from its real content. */
+function splitLeadingSwitches(nodes: Ast.Node[]): { prefix: Ast.Node[]; rest: Ast.Node[] } {
+  let i = 0;
+  while (i < nodes.length && (isSpacing(nodes[i]) || switchKind(nodes[i]) !== null)) i++;
+  return { prefix: nodes.slice(0, i), rest: nodes.slice(i) };
+}
+
+/** Read the active style from a field's leading switches. */
+function readStyle(prefix: Ast.Node[]): ComponentStyle {
+  const style: ComponentStyle = {};
+  for (const n of prefix) {
+    const k = switchKind(n);
+    if (n.type !== 'macro') continue;
+    // \color may parse as `o m` (optional [model] + {spec}); the spec is the last arg.
+    if (k === 'color') style.color = latexToString(n.args?.at(-1)?.content ?? []).trim();
+    else if (k === 'size') style.size = n.content;
+    else if (k === 'bold') style.bold = true;
+  }
+  return style;
+}
 
 /** Top-level ni-family macros in a frame, in document order. */
 function frameNiMacros(frame: Ast.Environment): Ast.Macro[] {
@@ -623,7 +648,8 @@ function niComponentInfos(frame: Ast.Environment): NiComponent[] {
       x: argToNumber(a[0]),
       y: argToNumber(a[1]),
       w: argToNumber(a[2]),
-      fields: a.slice(3).map((arg) => latexToString(arg.content).trim()),
+      fields: a.slice(3).map((arg) => latexToString(splitLeadingSwitches(arg.content).rest).trim()),
+      styles: a.slice(3).map((arg) => readStyle(splitLeadingSwitches(arg.content).prefix)),
     };
   });
 }
@@ -700,7 +726,46 @@ export function setNiField(
   if (!node?.args) return false;
   const argIdx = 3 + fieldIndex;
   if (argIdx < 3 || argIdx >= node.args.length) return false;
-  node.args[argIdx] = parsedArg(value);
+  // Keep the field's leading style switches; only the text after them changes.
+  const { prefix } = splitLeadingSwitches(node.args[argIdx].content);
+  node.args[argIdx] = {
+    type: 'argument',
+    openMark: '{',
+    closeMark: '}',
+    content: [...prefix, ...parseTex(value).content],
+  };
+  return true;
+}
+
+/** Apply/replace/remove a formatting switch on a ni component's field (style = the kind). */
+export function setNiFieldStyle(
+  ast: Ast.Root,
+  frameIndex: number,
+  index: number,
+  fieldIndex: number,
+  style: 'size' | 'color' | 'bold',
+  value: string | null,
+): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  const node = frame && frameNiMacros(frame)[index];
+  if (!node?.args) return false;
+  const argIdx = 3 + fieldIndex;
+  if (argIdx >= node.args.length) return false;
+  return setLeadingSwitch(node.args[argIdx].content, 0, style, value);
+}
+
+/** Clone a ni component, offset slightly down-right so it does not overlap the original. */
+export function duplicateNiComponent(ast: Ast.Root, frameIndex: number, index: number): boolean {
+  const frame = collectFrames(ast)[frameIndex]?.node;
+  const node = frame && frameNiMacros(frame)[index];
+  if (!frame || !node?.args) return false;
+  const clone = structuredClone(node);
+  if (clone.args) {
+    clone.args[0] = numberArg(argToNumber(node.args[0]) + 3);
+    clone.args[1] = numberArg(argToNumber(node.args[1]) - 3);
+  }
+  const at = frame.content.indexOf(node);
+  frame.content.splice(at + 1, 0, { type: 'parbreak' }, clone);
   return true;
 }
 
@@ -746,6 +811,15 @@ export type TexEditOp =
   | { kind: 'moveNiComponent'; frameIndex: number; index: number; x: number; y: number }
   | { kind: 'resizeNiComponent'; frameIndex: number; index: number; w: number }
   | { kind: 'setNiField'; frameIndex: number; index: number; fieldIndex: number; value: string }
+  | {
+      kind: 'setNiFieldStyle';
+      frameIndex: number;
+      index: number;
+      fieldIndex: number;
+      style: 'size' | 'color' | 'bold';
+      value: string | null;
+    }
+  | { kind: 'duplicateNiComponent'; frameIndex: number; index: number }
   | { kind: 'deleteNiComponent'; frameIndex: number; index: number };
 
 /** Apply one edit op to the AST in place. Returns whether anything changed. */
@@ -785,6 +859,10 @@ export function applyOp(ast: Ast.Root, op: TexEditOp): boolean {
       return resizeNiComponent(ast, op.frameIndex, op.index, op.w);
     case 'setNiField':
       return setNiField(ast, op.frameIndex, op.index, op.fieldIndex, op.value);
+    case 'setNiFieldStyle':
+      return setNiFieldStyle(ast, op.frameIndex, op.index, op.fieldIndex, op.style, op.value);
+    case 'duplicateNiComponent':
+      return duplicateNiComponent(ast, op.frameIndex, op.index);
     case 'deleteNiComponent':
       return deleteNiComponent(ast, op.frameIndex, op.index);
     default:

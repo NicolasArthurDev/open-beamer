@@ -30,6 +30,8 @@ export function Viewer() {
   const { frames } = useOutline(id);
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
+  // The selected NiTeX component (index within the active frame), or null.
+  const [selected, setSelected] = useState<number | null>(null);
 
   const pageCount = doc?.numPages ?? 1;
   const raw = Number(params.get('p') ?? '1') - 1;
@@ -37,6 +39,10 @@ export function Viewer() {
   // The inspector + palette follow the slide currently shown in the preview.
   const activeFrame = frameForPage(page + 1);
   const niComponents = frames[activeFrame]?.niComponents ?? [];
+
+  // Selection is per-slide; drop it when the visible slide changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the slide changes
+  useEffect(() => setSelected(null), [activeFrame]);
 
   const goTo = useCallback(
     (i: number) => {
@@ -160,6 +166,8 @@ export function Viewer() {
                   editing ? (
                     <NiboxOverlay
                       niComponents={niComponents}
+                      selected={selected}
+                      onSelect={setSelected}
                       onMove={(i, x, y) =>
                         edit({ kind: 'moveNiComponent', frameIndex: activeFrame, index: i, x, y })
                       }
@@ -211,7 +219,13 @@ export function Viewer() {
           )}
         </main>
 
-        <EditPanel deckId={id} open={editing} active={activeFrame} />
+        <EditPanel
+          deckId={id}
+          open={editing}
+          active={activeFrame}
+          selected={selected}
+          onSelect={setSelected}
+        />
       </div>
     </div>
   );
