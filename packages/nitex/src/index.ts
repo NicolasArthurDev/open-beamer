@@ -147,9 +147,9 @@ export const NITEX_STY_SOURCE = String.raw`\NeedsTeXFormat{LaTeX2e}
     \pgfmathsetlengthmacro\nitex@x{#1/100*\paperwidth}%
     \pgfmathsetlengthmacro\nitex@y{#2/100*\paperheight}%
     \pgfmathsetlengthmacro\nitex@w{#3/100*\paperwidth}%
-    \node[anchor=north west, inner sep=0pt, outer sep=0pt, text width=\nitex@w]
+    \node[anchor=north west, inner sep=0pt, outer sep=0pt]
       at ([xshift=\nitex@x, yshift=\nitex@y]current page.south west)
-      {#4};%
+      {\parbox[t]{\nitex@w}{#4}};%
   \end{tikzpicture}%
 }
 

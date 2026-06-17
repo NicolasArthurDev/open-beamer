@@ -13,6 +13,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ComponentPalette } from '../components/component-palette';
 import { EditPanel } from '../components/edit-panel';
 import { Filmstrip } from '../components/filmstrip';
+import { FormatToolbar } from '../components/format-toolbar';
 import { NiboxOverlay } from '../components/nibox-overlay';
 import { Button } from '../components/ui/button';
 import { PdfCanvas } from '../lib/pdf';
@@ -30,6 +31,8 @@ export function Viewer() {
   const { frames } = useOutline(id);
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
+  // The selected NiTeX component (index within the active frame), or null.
+  const [selected, setSelected] = useState<number | null>(null);
 
   const pageCount = doc?.numPages ?? 1;
   const raw = Number(params.get('p') ?? '1') - 1;
@@ -37,6 +40,11 @@ export function Viewer() {
   // The inspector + palette follow the slide currently shown in the preview.
   const activeFrame = frameForPage(page + 1);
   const niComponents = frames[activeFrame]?.niComponents ?? [];
+  const selectedComp = selected != null ? niComponents[selected] : undefined;
+
+  // Selection is per-slide; drop it when the visible slide changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the slide changes
+  useEffect(() => setSelected(null), [activeFrame]);
 
   const goTo = useCallback(
     (i: number) => {
@@ -160,11 +168,10 @@ export function Viewer() {
                   editing ? (
                     <NiboxOverlay
                       niComponents={niComponents}
-                      onMove={(i, x, y) =>
-                        edit({ kind: 'moveNiComponent', frameIndex: activeFrame, index: i, x, y })
-                      }
-                      onResize={(i, w) =>
-                        edit({ kind: 'resizeNiComponent', frameIndex: activeFrame, index: i, w })
+                      selected={selected}
+                      onSelect={setSelected}
+                      onChange={(i, x, y, w) =>
+                        edit({ kind: 'setNiBox', frameIndex: activeFrame, index: i, x, y, w })
                       }
                     />
                   ) : undefined
@@ -179,8 +186,26 @@ export function Viewer() {
             )}
           </div>
 
+          {editing && selectedComp && !error && (
+            <div className="-translate-x-1/2 absolute top-3 left-1/2 z-10">
+              <FormatToolbar
+                comp={selectedComp}
+                onStyle={(style, value) =>
+                  edit({
+                    kind: 'setNiFieldStyle',
+                    frameIndex: activeFrame,
+                    index: selectedComp.index,
+                    fieldIndex: 0,
+                    style,
+                    value,
+                  })
+                }
+              />
+            </div>
+          )}
+
           {loading && doc && !error && (
-            <div className="-translate-x-1/2 absolute top-4 left-1/2 flex items-center gap-2 rounded-full border border-hairline bg-sidebar/90 px-3 py-1.5 shadow-floating backdrop-blur-md">
+            <div className="absolute top-3 right-3 flex items-center gap-2 rounded-full border border-hairline bg-sidebar/90 px-3 py-1.5 shadow-floating backdrop-blur-md">
               <Loader2 className="size-3.5 animate-spin text-brand" />
               <span className="text-[12px] text-muted-foreground">compilando…</span>
             </div>
@@ -211,7 +236,13 @@ export function Viewer() {
           )}
         </main>
 
-        <EditPanel deckId={id} open={editing} active={activeFrame} />
+        <EditPanel
+          deckId={id}
+          open={editing}
+          active={activeFrame}
+          selected={selected}
+          onSelect={setSelected}
+        />
       </div>
     </div>
   );
