@@ -14,16 +14,23 @@ const SIZES = [
   'huge',
   'Huge',
 ] as const;
-const COLORS = ['black', 'red', 'blue', 'teal', 'orange', 'gray'];
+// Quick-pick swatches (hex); the color well next to them picks any color.
+const SWATCHES = ['#1A1A1A', '#E5484D', '#2563EB', '#0D9488', '#F59E0B', '#8E8E93'];
 const ALIGNS = [
   { value: 'left', icon: AlignLeft },
   { value: 'center', icon: AlignCenter },
   { value: 'right', icon: AlignRight },
 ] as const;
+const FONTS = [
+  { value: 'sans', label: 'Sans' },
+  { value: 'serif', label: 'Serif' },
+  { value: 'mono', label: 'Mono' },
+];
 
-type StyleKind = 'size' | 'color' | 'bold' | 'align';
+type StyleKind = 'size' | 'color' | 'bold' | 'align' | 'font';
 
 const Divider = () => <span className="mx-0.5 h-4 w-px bg-hairline" />;
+const isHex = (c?: string) => !!c && /^#[0-9a-fA-F]{6}$/.test(c);
 
 /** Contextual top toolbar (PowerPoint-style) for the selected component's formatting. */
 export function FormatToolbar({
@@ -43,6 +50,18 @@ export function FormatToolbar({
 
   return (
     <div className="flex items-center gap-1 rounded-full border border-hairline bg-sidebar/95 px-2 py-1 shadow-floating backdrop-blur-md">
+      <select
+        aria-label="Fonte"
+        value={style.font ?? 'sans'}
+        onChange={(e) => onStyle('font', e.target.value)}
+        className="h-7 rounded-[5px] border border-border bg-background px-1.5 text-[12px] outline-none"
+      >
+        {FONTS.map((f) => (
+          <option key={f.value} value={f.value}>
+            {f.label}
+          </option>
+        ))}
+      </select>
       <Button
         variant="outline"
         size="icon-sm"
@@ -72,7 +91,7 @@ export function FormatToolbar({
         </Button>
       ))}
       <Divider />
-      {COLORS.map((c) => (
+      {SWATCHES.map((c) => (
         <button
           key={c}
           type="button"
@@ -82,6 +101,20 @@ export function FormatToolbar({
           style={{ background: c }}
         />
       ))}
+      <label
+        title="Qualquer cor"
+        className="relative size-5 cursor-pointer overflow-hidden rounded-full ring-1 ring-black/25"
+        style={{
+          background: 'conic-gradient(red, orange, yellow, lime, aqua, blue, magenta, red)',
+        }}
+      >
+        <input
+          type="color"
+          value={isHex(style.color) ? (style.color as string) : '#000000'}
+          onChange={(e) => onStyle('color', e.target.value)}
+          className="absolute inset-0 cursor-pointer opacity-0"
+        />
+      </label>
     </div>
   );
 }

@@ -291,7 +291,7 @@ function bodyStart(frame: Ast.Environment): number {
   return i;
 }
 
-type SwitchKind = 'size' | 'color' | 'bold' | 'align';
+type SwitchKind = 'size' | 'color' | 'bold' | 'align' | 'font';
 
 // Alignment switches work because ni content is rendered in a \parbox (see nitex.sty).
 const ALIGN_MACROS: Record<string, string> = {
@@ -304,6 +304,17 @@ const ALIGN_BY_MACRO: Record<string, string> = {
   centering: 'center',
   raggedleft: 'right',
 };
+// Portable font families (no fontspec): serif/sans/mono.
+const FONT_MACROS: Record<string, string> = {
+  serif: 'rmfamily',
+  sans: 'sffamily',
+  mono: 'ttfamily',
+};
+const FONT_BY_MACRO: Record<string, string> = {
+  rmfamily: 'serif',
+  sffamily: 'sans',
+  ttfamily: 'mono',
+};
 
 function isSizeMacro(n: Ast.Macro): boolean {
   return (FONT_SIZES as readonly string[]).includes(n.content);
@@ -315,13 +326,25 @@ function switchKind(n: Ast.Node): SwitchKind | null {
   if (n.content === 'color') return 'color';
   if (n.content === 'bfseries') return 'bold';
   if (n.content in ALIGN_BY_MACRO) return 'align';
+  if (n.content in FONT_BY_MACRO) return 'font';
   return null;
 }
 
+/** An optional `[model]` argument (e.g. `\color[HTML]{...}`). */
+function optionalArg(value: string): Ast.Argument {
+  return { type: 'argument', openMark: '[', closeMark: ']', content: [{ type: 'string', content: value }] };
+}
+
 function makeSwitch(kind: SwitchKind, value: string): Ast.Macro {
-  if (kind === 'color') return { type: 'macro', content: 'color', args: [textArgument(value)] };
+  if (kind === 'color') {
+    const hex = value.replace(/^#/, '');
+    if (/^[0-9a-fA-F]{6}$/.test(hex))
+      return { type: 'macro', content: 'color', args: [optionalArg('HTML'), textArgument(hex.toUpperCase())] };
+    return { type: 'macro', content: 'color', args: [textArgument(value)] };
+  }
   if (kind === 'bold') return { type: 'macro', content: 'bfseries' };
   if (kind === 'align') return { type: 'macro', content: ALIGN_MACROS[value] ?? 'raggedright' };
+  if (kind === 'font') return { type: 'macro', content: FONT_MACROS[value] ?? 'rmfamily' };
   return { type: 'macro', content: value }; // size
 }
 
@@ -591,7 +614,13 @@ export function reorderFrame(ast: Ast.Root, from: number, to: number): boolean {
 // corner; w = width as % of the page. Each type's macro + fields come from the
 // NI_COMPONENTS registry in @nitex/nitex.
 
-export type ComponentStyle = { color?: string; size?: string; bold?: boolean; align?: string };
+export type ComponentStyle = {
+  color?: string;
+  size?: string;
+  bold?: boolean;
+  align?: string;
+  font?: string;
+};
 
 export type NiComponent = {
   index: number;
@@ -622,10 +651,14 @@ function readStyle(prefix: Ast.Node[]): ComponentStyle {
     const k = switchKind(n);
     if (n.type !== 'macro') continue;
     // \color may parse as `o m` (optional [model] + {spec}); the spec is the last arg.
-    if (k === 'color') style.color = latexToString(n.args?.at(-1)?.content ?? []).trim();
-    else if (k === 'size') style.size = n.content;
+    if (k === 'color') {
+      const model = (n.args?.length ?? 0) > 1 ? latexToString(n.args?.[0]?.content ?? []).trim() : '';
+      const spec = latexToString(n.args?.at(-1)?.content ?? []).trim();
+      style.color = model.toUpperCase() === 'HTML' ? `#${spec}` : spec;
+    } else if (k === 'size') style.size = n.content;
     else if (k === 'bold') style.bold = true;
     else if (k === 'align') style.align = ALIGN_BY_MACRO[n.content];
+    else if (k === 'font') style.font = FONT_BY_MACRO[n.content];
   }
   return style;
 }
@@ -776,7 +809,7 @@ export function setNiFieldStyle(
   frameIndex: number,
   index: number,
   fieldIndex: number,
-  style: 'size' | 'color' | 'bold' | 'align',
+  style: 'size' | 'color' | 'bold' | 'align' | 'font',
   value: string | null,
 ): boolean {
   const frame = collectFrames(ast)[frameIndex]?.node;
@@ -850,7 +883,7 @@ export type TexEditOp =
       frameIndex: number;
       index: number;
       fieldIndex: number;
-      style: 'size' | 'color' | 'bold' | 'align';
+      style: 'size' | 'color' | 'bold' | 'align' | 'font';
       value: string | null;
     }
   | { kind: 'duplicateNiComponent'; frameIndex: number; index: number }
