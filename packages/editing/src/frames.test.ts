@@ -316,6 +316,20 @@ describe('NiTeX components', () => {
     expect(listNiComponents(ast, 0)[0].styles[0].color).toBe('blue');
   });
 
+  it('supports any hex color (\\color[HTML]) and font family, round-tripping', () => {
+    const ast = parseTex(SAMPLE);
+    insertNiComponent(ast, 0, 'box', 10, 80, 40);
+    setNiFieldStyle(ast, 0, 0, 0, 'color', '#2563EB');
+    setNiFieldStyle(ast, 0, 0, 0, 'font', 'sans');
+    const out = printTex(ast);
+    expect(out).toContain('\\color[HTML]{2563EB}');
+    expect(out).toContain('\\sffamily');
+    // re-parse to exercise readStyle on the `o m` \color + the font macro
+    const re = listNiComponents(parseTex(out), 0)[0];
+    expect(re.styles[0]).toMatchObject({ color: '#2563EB', font: 'sans' });
+    expect(re.fields[0]).toBe('Texto');
+  });
+
   it('editing the text preserves the style', () => {
     const ast = parseTex(SAMPLE);
     insertNiComponent(ast, 0, 'box', 10, 80, 40);

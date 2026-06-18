@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
 export type ComponentInfo = { index: number; env: string; label: string };
-export type ComponentStyle = { color?: string; size?: string; bold?: boolean; align?: string };
+export type ComponentStyle = {
+  color?: string;
+  size?: string;
+  bold?: boolean;
+  align?: string;
+  font?: string;
+};
 export type NiComponent = {
   index: number;
   type: string;
